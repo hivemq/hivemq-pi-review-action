@@ -1,5 +1,12 @@
 name: 'Pi PR Review - Resolve Event'
 description: 'Determines if the current GitHub event should trigger a Pi PR review'
+inputs:
+  allowed-comment-associations:
+    description: >-
+      Comma-separated list of GitHub author associations allowed to trigger a review
+      via /review comment (e.g. OWNER,MEMBER,COLLABORATOR). Leave empty to allow anyone.
+    required: false
+    default: 'OWNER,MEMBER,COLLABORATOR'
 outputs:
   should-run:
     description: 'Whether the review should run (true/false)'
@@ -32,10 +39,17 @@ runs:
           # Only trigger on PR comments that start with /review
           is_pr="${{ github.event.issue.pull_request && 'true' || 'false' }}"
           comment_body="${{ github.event.comment.body }}"
+          allowed_associations="${{ inputs.allowed-comment-associations }}"
+          author_association="${{ github.event.comment.author_association }}"
+
           if [ "$is_pr" = "true" ] && [[ "$comment_body" == /review* ]]; then
-            should_run=true
-            pr_number="${{ github.event.issue.number }}"
-            post_comment=true
+            if [ -z "$allowed_associations" ] || echo ",$allowed_associations," | grep -qi ",$author_association,"; then
+              should_run=true
+              pr_number="${{ github.event.issue.number }}"
+              post_comment=true
+            else
+              echo "Ignoring /review from author_association=$author_association (allowed: $allowed_associations)"
+            fi
           fi
 
         elif [ "${{ github.event_name }}" = "pull_request" ]; then
