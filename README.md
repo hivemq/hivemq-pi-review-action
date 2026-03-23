@@ -46,10 +46,6 @@ on:
         default: false
         type: boolean
 
-concurrency:
-  group: pi-review-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number }}
-  cancel-in-progress: true
-
 jobs:
   resolve:
     if: >-
@@ -142,3 +138,6 @@ The composite action handles three event types:
 | `issue_comment`     | PR comment starting with `/review` by allowed author association | `true`                        |
 | `pull_request`      | Non-draft PR with `review` label added | `true`                        |
 
+## License
+
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
