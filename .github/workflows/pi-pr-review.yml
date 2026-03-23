@@ -17,6 +17,11 @@ on:
         required: false
         default: 'pi'
         type: string
+      action-ref:
+        description: 'Git ref of hivemq-pi-review-action to check out for prompts'
+        required: false
+        default: 'v1'
+        type: string
     secrets:
       OPENAI_API_KEY:
         required: true
@@ -30,21 +35,79 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  setup:
+    name: Setup
+    runs-on: "${{ inputs.runner-label }}"
+    outputs:
+      review-matrix: ${{ steps.parse.outputs.review-matrix }}
+      judge-model: ${{ steps.parse.outputs.judge-model }}
+      judge-thinking: ${{ steps.parse.outputs.judge-thinking }}
+    steps:
+      - name: Parse model config
+        id: parse
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          PI_REVIEW_MODELS: ${{ vars.PI_REVIEW_MODELS }}
+        with:
+          script: |
+            const defaultConfig = {
+              review: [
+                { model: 'openai/gpt-5.4', thinking: 'medium', label: 'gpt-5.4' },
+                { model: 'anthropic/claude-sonnet-4-6', thinking: 'medium', label: 'claude-sonnet-4.6' },
+                { model: 'openrouter/google/gemini-3.1-pro-preview', label: 'gemini-3.1-pro' },
+              ],
+              judge: { model: 'openai/gpt-5.4', thinking: 'medium' },
+            };
+
+            const raw = process.env.PI_REVIEW_MODELS;
+            if (!raw) {
+              core.warning('PI_REVIEW_MODELS is not set — using defaults');
+              core.setOutput('review-matrix', JSON.stringify(defaultConfig.review));
+              core.setOutput('judge-model', defaultConfig.judge.model);
+              core.setOutput('judge-thinking', defaultConfig.judge.thinking);
+              return;
+            }
+
+            let config;
+            try {
+              config = JSON.parse(raw);
+            } catch (e) {
+              core.setFailed(`PI_REVIEW_MODELS is not valid JSON: ${e.message}`);
+              return;
+            }
+
+            if (!Array.isArray(config.review) || config.review.length === 0) {
+              core.setFailed('PI_REVIEW_MODELS.review must be a non-empty array');
+              return;
+            }
+            for (const [i, entry] of config.review.entries()) {
+              if (!entry.model) {
+                core.setFailed(`PI_REVIEW_MODELS.review[${i}] is missing required field 'model'`);
+                return;
+              }
+              if (!entry.label) {
+                core.setFailed(`PI_REVIEW_MODELS.review[${i}] is missing required field 'label'`);
+                return;
+              }
+            }
+
+            if (!config.judge?.model) {
+              core.setFailed('PI_REVIEW_MODELS.judge.model is required');
+              return;
+            }
+
+            core.setOutput('review-matrix', JSON.stringify(config.review));
+            core.setOutput('judge-model', config.judge.model);
+            core.setOutput('judge-thinking', config.judge.thinking || '');
+
   pi_review:
     name: "Pi Review (${{ matrix.label }})"
+    needs: [setup]
     runs-on: "${{ inputs.runner-label }}"
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - model: openai/gpt-5.4
-            thinking: medium
-            label: gpt-5.4
-          - model: anthropic/claude-sonnet-4-6
-            thinking: medium
-            label: claude-sonnet-4.6
-          - model: openrouter/google/gemini-3.1-pro-preview
-            label: gemini-3.1-pro
+        include: ${{ fromJSON(needs.setup.outputs.review-matrix) }}
     permissions:
       contents: read
       pull-requests: write
@@ -87,7 +150,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: hivemq/hivemq-pi-review-action
-          ref: v1
+          ref: ${{ inputs.action-ref }}
           path: .pi-review-action
 
       - name: Ensure Node.js and Pi agent
@@ -235,7 +298,7 @@ jobs:
 
   pi_judge:
     name: Pi Judge
-    needs: [pi_review]
+    needs: [setup, pi_review]
     if: ${{ !cancelled() && needs.pi_review.result != 'skipped' }}
     runs-on: "${{ inputs.runner-label }}"
     permissions:
@@ -252,7 +315,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: hivemq/hivemq-pi-review-action
-          ref: v1
+          ref: ${{ inputs.action-ref }}
           path: .pi-review-action
 
       - name: Ensure Node.js and Pi agent
@@ -308,7 +371,7 @@ jobs:
         if: steps.validate_judge.outputs.skip != 'true'
         run: |
           set -o pipefail
-          pi -p --model openai/gpt-5.4 --thinking medium --no-session \
+          pi -p --model ${{ needs.setup.outputs.judge-model }} ${{ needs.setup.outputs.judge-thinking && format('--thinking {0}', needs.setup.outputs.judge-thinking) || '' }} --no-session \
             "$(cat .pi-review-action/prompts/judge.md)" \
             | tee pi-judge-output.md
 
