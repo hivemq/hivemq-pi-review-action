@@ -22,6 +22,8 @@ runs:
   steps:
     - id: resolve
       shell: bash
+      env:
+        COMMENT_BODY: ${{ github.event.comment.body }}
       run: |
         should_run=false
         pr_number=""
@@ -38,7 +40,7 @@ runs:
         elif [ "${{ github.event_name }}" = "issue_comment" ]; then
           # Only trigger on PR comments that start with /review
           is_pr="${{ github.event.issue.pull_request && 'true' || 'false' }}"
-          comment_body="${{ github.event.comment.body }}"
+          comment_body="$COMMENT_BODY"
           allowed_associations="${{ inputs.allowed-comment-associations }}"
           author_association="${{ github.event.comment.author_association }}"
 
