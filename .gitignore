@@ -5,3 +5,10 @@ out/
 
 .java-version
 .DS_Store
+
+# Swamp local state (bundles, pulled extensions, workflow runs, data artifacts)
+.swamp/
+# Model instance YAMLs — UUIDs are bound to a local swamp; regenerate via `swamp model create`
+/models/
+# Claude Code per-user settings and skills pulled by swamp
+.claude/

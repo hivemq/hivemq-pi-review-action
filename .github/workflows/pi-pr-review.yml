@@ -1,21 +1,31 @@
-name: Pi PR Review
+name: Adversarial PR Review
 
 on:
   workflow_call:
     inputs:
-      pr-number:
-        description: 'Pull request number to review'
-        required: true
-        type: number
-      post-comment:
-        description: 'Post or update PR comment with results'
-        required: false
-        default: true
-        type: boolean
       runner-label:
-        description: 'Runner label to use'
+        description: 'Runner label to use for the review job.'
         required: false
         default: 'pi'
+        type: string
+      reviewer-models:
+        description: >-
+          JSON array of reviewer model configs. Each item is { id, thinking? }.
+          Defaults to the CI three-model ensemble.
+        required: false
+        default: >-
+          [
+            {"id":"openai/gpt-5.4","thinking":"medium"},
+            {"id":"anthropic/claude-sonnet-4-6","thinking":"medium"},
+            {"id":"openrouter/google/gemini-3.1-pro-preview"}
+          ]
+        type: string
+      judge-model:
+        description: >-
+          JSON object for the judge model config ({ id, thinking? }). Defaults
+          to openai/gpt-5.4 at medium thinking, matching prior behavior.
+        required: false
+        default: '{"id":"openai/gpt-5.4","thinking":"medium"}'
         type: string
     secrets:
       OPENAI_API_KEY:
@@ -26,29 +36,82 @@ on:
         required: true
 
 concurrency:
-  group: pi-review-${{ inputs.pr-number }}
+  group: >-
+    pi-review-${{
+      github.event.pull_request.number
+      || github.event.issue.number
+      || github.event.inputs.pr_number
+    }}
   cancel-in-progress: true
 
 jobs:
-  pi_review:
-    name: "Pi Review (${{ matrix.label }})"
-    runs-on: "${{ inputs.runner-label }}"
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - model: openai/gpt-5.4
-            thinking: medium
-            label: gpt-5.4
-          - model: anthropic/claude-sonnet-4-6
-            thinking: medium
-            label: claude-sonnet-4.6
-          - model: openrouter/google/gemini-3.1-pro-preview
-            label: gemini-3.1-pro
+  resolve:
+    name: Resolve event
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.resolve.outputs.should-run }}
+      pr-number: ${{ steps.resolve.outputs.pr-number }}
+      post-comment: ${{ steps.resolve.outputs.post-comment }}
+    steps:
+      - id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WD_PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          WD_POST_COMMENT: ${{ github.event.inputs.post_comment }}
+          ISSUE_IS_PR: ${{ github.event.issue.pull_request && 'true' || 'false' }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PR_IS_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_LABEL_NAME: ${{ github.event.label.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          should_run=false
+          pr_number=""
+          post_comment=false
+
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              should_run=true
+              pr_number="$WD_PR_NUMBER"
+              post_comment="${WD_POST_COMMENT:-false}"
+              ;;
+            issue_comment)
+              if [ "$ISSUE_IS_PR" = "true" ] && [[ "$COMMENT_BODY" == /review* ]]; then
+                should_run=true
+                pr_number="$ISSUE_NUMBER"
+                post_comment=true
+              fi
+              ;;
+            pull_request)
+              if [ "$PR_IS_DRAFT" != "true" ] && [ "$PR_LABEL_NAME" = "review" ]; then
+                should_run=true
+                pr_number="$PR_NUMBER"
+                post_comment=true
+              fi
+              ;;
+          esac
+
+          {
+            echo "should-run=$should_run"
+            echo "pr-number=$pr_number"
+            echo "post-comment=$post_comment"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "event=$EVENT_NAME should-run=$should_run pr-number=$pr_number post-comment=$post_comment"
+
+  review:
+    name: Adversarial review
+    needs: resolve
+    if: needs.resolve.outputs.should-run == 'true'
+    runs-on: ${{ inputs.runner-label }}
     permissions:
       contents: read
       pull-requests: write
       issues: write
+    env:
+      PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
+      POST_COMMENT: ${{ needs.resolve.outputs.post-comment }}
     steps:
       - name: Resolve PR context
         id: pr_context
@@ -56,14 +119,12 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
-            const number = ${{ inputs.pr-number }};
-
+            const number = Number(process.env.PR_NUMBER);
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: number,
             });
-
             core.setOutput('number', String(pr.number));
             core.setOutput('title', pr.title);
             core.setOutput('url', pr.html_url);
@@ -72,12 +133,15 @@ jobs:
             core.setOutput('head_ref', pr.head.ref);
             core.setOutput('head_sha', pr.head.sha);
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Checkout PR merge
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: refs/pull/${{ steps.pr_context.outputs.number }}/merge
           fetch-depth: 0
+          path: target
 
       - name: Pre-fetch base and head refs
+        working-directory: target
         run: |
           git fetch --no-tags origin \
             ${{ steps.pr_context.outputs.base_ref }} \
@@ -87,19 +151,18 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: hivemq/hivemq-pi-review-action
-          ref: v1
-          path: .pi-review-action
+          ref: ${{ github.workflow_ref && github.workflow_sha || 'v1' }}
+          path: action
 
-      - name: Ensure Node.js and Pi agent
+      - name: Ensure Node 24 and Pi on PATH
         id: deps
         run: |
           if ! node --version 2>/dev/null | grep -q '^v24\.'; then
-            echo "Node 24 not found, installing via setup-node..."
             echo "need_node=true" >> "$GITHUB_OUTPUT"
           fi
-          command -v pi || echo "need_pi=true" >> "$GITHUB_OUTPUT"
+          command -v pi >/dev/null || echo "need_pi=true" >> "$GITHUB_OUTPUT"
 
-      - name: Install Node.js
+      - name: Install Node 24
         if: steps.deps.outputs.need_node == 'true'
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
@@ -109,244 +172,127 @@ jobs:
         if: steps.deps.outputs.need_pi == 'true'
         run: sudo npm install -g @mariozechner/pi-coding-agent
 
-      - name: Print Pi version
-        run: pi --version
-
-      - name: Compute PR file list
+      - name: Install swamp
         run: |
-          git diff --name-status "$PR_BASE_SHA...$PR_HEAD_SHA" | tee pr-changed-files.txt
+          curl -fsSL https://swamp.club/install.sh | sh
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Initialize scratch swamp repo
+        working-directory: action
+        run: |
+          if [ ! -d .swamp ]; then
+            swamp init
+          fi
+          if ! swamp extension source list --json 2>/dev/null | grep -q "action/extensions"; then
+            swamp extension source add "$GITHUB_WORKSPACE/action/extensions"
+          fi
+          if ! swamp model get adversarial-reviewers --json >/dev/null 2>&1; then
+            swamp model create @hivemq/adversarial-review/reviewer adversarial-reviewers --json
+          fi
+          if ! swamp model get adversarial-judge --json >/dev/null 2>&1; then
+            swamp model create @hivemq/adversarial-review/judge adversarial-judge --json
+          fi
+
+      - name: Compute changed files
+        id: changed_files
+        working-directory: target
         env:
           PR_BASE_SHA: ${{ steps.pr_context.outputs.base_sha }}
           PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
-
-      - name: Generate Pi review plan
-        id: generate_plan
         run: |
-          set -o pipefail
-          {
-            cat .pi-review-action/prompts/gen-review-plan.md
-            printf '\n## Pre-computed PR delta\nUse this list as the PR delta:\n\n'
-            cat pr-changed-files.txt
-          } > pi-review-prompt.txt
-          pi -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
-            "$(cat pi-review-prompt.txt)" \
-            | tee pi-review-plan.txt
+          git diff --name-status "$PR_BASE_SHA...$PR_HEAD_SHA" > "$RUNNER_TEMP/changed-files.txt"
+          echo "path=$RUNNER_TEMP/changed-files.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Build workflow inputs
+        id: inputs
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
           PR_URL: ${{ steps.pr_context.outputs.url }}
           PR_BASE_REF: ${{ steps.pr_context.outputs.base_ref }}
           PR_BASE_SHA: ${{ steps.pr_context.outputs.base_sha }}
           PR_HEAD_REF: ${{ steps.pr_context.outputs.head_ref }}
           PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
-          REVIEW_PLAN_FILE: pi-review-plan.txt
-
-      - name: Validate review plan output
         run: |
-          if [ ! -s "pi-review-plan.txt" ] || ! grep -q '[^[:space:]]' pi-review-plan.txt; then
-            echo "pi-review-plan.txt is missing or whitespace-only; failing fast."
-            exit 1
-          fi
+          jq -n \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg baseRef "$PR_BASE_REF" \
+            --arg baseSha "$PR_BASE_SHA" \
+            --arg headRef "$PR_HEAD_REF" \
+            --arg headSha "$PR_HEAD_SHA" \
+            --rawfile changedFiles "$RUNNER_TEMP/changed-files.txt" \
+            --arg repoPath "$GITHUB_WORKSPACE/target" \
+            --argjson models '${{ inputs.reviewer-models }}' \
+            --argjson judge '${{ inputs.judge-model }}' \
+            '{
+              changedFiles: $changedFiles,
+              repoPath: $repoPath,
+              models: $models,
+              judge: $judge,
+              metadata: {
+                title: $title,
+                url: $url,
+                baseRef: $baseRef,
+                baseSha: $baseSha,
+                headRef: $headRef,
+                headSha: $headSha
+              }
+            }' > "$RUNNER_TEMP/workflow-inputs.json"
+          echo "path=$RUNNER_TEMP/workflow-inputs.json" >> "$GITHUB_OUTPUT"
 
-      - name: Print review plan
-        run: |
-          echo "Full Pi review plan (${{ matrix.label }}):"
-          cat pi-review-plan.txt
-
-      - name: Run Pi review
-        id: run_pi
-        run: |
-          set -o pipefail
-          pi -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
-            "$(cat .pi-review-action/prompts/review.md)" \
-            | tee pi-output.md
-
-          sed -i 's|<h2>PR Review</h2>|<h2>PR Review (${{ matrix.label }})</h2>|' pi-output.md
-
-          delim="PIEOF_$(dd if=/dev/urandom bs=15 count=1 status=none | base64)"
-          {
-            echo "final-message<<$delim"
-            cat pi-output.md
-            echo "$delim"
-          } >> "$GITHUB_OUTPUT"
+      - name: Run adversarial-review workflow
+        working-directory: action
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PR_NUMBER: ${{ steps.pr_context.outputs.number }}
-          PR_TITLE: ${{ steps.pr_context.outputs.title }}
-          PR_URL: ${{ steps.pr_context.outputs.url }}
-          PR_BASE_REF: ${{ steps.pr_context.outputs.base_ref }}
-          PR_BASE_SHA: ${{ steps.pr_context.outputs.base_sha }}
-          PR_HEAD_REF: ${{ steps.pr_context.outputs.head_ref }}
-          PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
-          REVIEW_PLAN_FILE: pi-review-plan.txt
-
-      - name: Publish Pi result to run summary
-        if: ${{ steps.run_pi.outputs.final-message != '' }}
-        env:
-          PI_FINAL_MESSAGE: ${{ steps.run_pi.outputs.final-message }}
-          PR_NUMBER: ${{ steps.pr_context.outputs.number }}
         run: |
-          plan_section_file="$(mktemp)"
-          final_with_plan_file="$(mktemp)"
+          swamp workflow run adversarial-review \
+            --input-file "$RUNNER_TEMP/workflow-inputs.json" \
+            --json | tee "$RUNNER_TEMP/workflow-run.json"
 
-          {
-            echo "<details><summary>Full review plan</summary>"
-            echo
-            echo '```text'
-            cat pi-review-plan.txt
-            echo
-            echo '```'
-            echo
-            echo "</details>"
-            echo
-          } > "$plan_section_file"
+      - name: Fetch rendered judge report
+        id: report
+        working-directory: action
+        run: |
+          swamp report get @hivemq/adversarial-review/report \
+            --model adversarial-judge \
+            --json > "$RUNNER_TEMP/report.json"
 
-          if printf '%s\n' "$PI_FINAL_MESSAGE" | grep -q '<h2>PR Review'; then
-            printf '%s\n' "$PI_FINAL_MESSAGE" | sed -e "0,/<h2>PR Review/{/<h2>PR Review/r $plan_section_file" -e "}" > "$final_with_plan_file"
-          else
-            {
-              cat "$plan_section_file"
-              printf '%s\n' "$PI_FINAL_MESSAGE"
-            } > "$final_with_plan_file"
+          jq -r '.markdown // .content // ""' \
+            "$RUNNER_TEMP/report.json" > "$RUNNER_TEMP/report.md"
+
+          if [ ! -s "$RUNNER_TEMP/report.md" ]; then
+            echo "Report markdown is empty; nothing to publish."
+            echo "has-markdown=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "has-markdown=true" >> "$GITHUB_OUTPUT"
+          echo "path=$RUNNER_TEMP/report.md" >> "$GITHUB_OUTPUT"
 
+      - name: Publish to run summary
+        if: steps.report.outputs.has-markdown == 'true'
+        run: |
           {
-            echo "## Pi PR review (${{ matrix.label }})"
+            echo "## Adversarial PR Review"
             echo
             echo "PR #$PR_NUMBER"
             echo
-            cat "$final_with_plan_file"
+            cat "${{ steps.report.outputs.path }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload Pi output
-        if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        with:
-          name: pi-pr-review-${{ matrix.label }}-${{ inputs.pr-number }}-${{ github.run_id }}
-          path: |
-            pi-output.md
-            pi-review-plan.txt
-          if-no-files-found: ignore
-
-  pi_judge:
-    name: Pi Judge
-    needs: [pi_review]
-    if: ${{ !cancelled() && needs.pi_review.result != 'skipped' }}
-    runs-on: "${{ inputs.runner-label }}"
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: refs/pull/${{ inputs.pr-number }}/merge
-          fetch-depth: 1
-
-      - name: Checkout action repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: hivemq/hivemq-pi-review-action
-          ref: v1
-          path: .pi-review-action
-
-      - name: Ensure Node.js and Pi agent
-        id: deps
-        run: |
-          if ! node --version 2>/dev/null | grep -q '^v24\.'; then
-            echo "need_node=true" >> "$GITHUB_OUTPUT"
-          fi
-          command -v pi || echo "need_pi=true" >> "$GITHUB_OUTPUT"
-
-      - name: Install Node.js
-        if: steps.deps.outputs.need_node == 'true'
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        with:
-          node-version: 24
-
-      - name: Install Pi coding agent
-        if: steps.deps.outputs.need_pi == 'true'
-        run: sudo npm install -g @mariozechner/pi-coding-agent
-
-      - name: Print Pi version
-        run: pi --version
-
-      - name: Download all review artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          pattern: pi-pr-review-*-${{ inputs.pr-number }}-${{ github.run_id }}
-          path: reviews
-
-      - name: Assemble judge input
-        run: |
-          : > judge-input.md
-          shopt -s nullglob
-          for dir in reviews/pi-pr-review-*; do
-            label="$(basename "$dir" | sed "s/^pi-pr-review-//; s/-${{ inputs.pr-number }}-${{ github.run_id }}$//")"
-            if [ -f "$dir/pi-output.md" ]; then
-              printf '\n---\n\n## Review: %s\n\n' "$label" >> judge-input.md
-              cat "$dir/pi-output.md" >> judge-input.md
-            fi
-          done
-          echo "=== Judge input: $(wc -c < judge-input.md) bytes ==="
-
-      - name: Validate judge input
-        id: validate_judge
-        run: |
-          if [ ! -s judge-input.md ] || ! grep -q '[^[:space:]]' judge-input.md; then
-            echo "judge-input.md is missing or empty; skipping judge."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run Pi Judge
-        id: run_judge
-        if: steps.validate_judge.outputs.skip != 'true'
-        run: |
-          set -o pipefail
-          pi -p --model openai/gpt-5.4 --thinking medium --no-session \
-            "$(cat .pi-review-action/prompts/judge.md)" \
-            | tee pi-judge-output.md
-
-          delim="PIEOF_$(dd if=/dev/urandom bs=15 count=1 status=none | base64)"
-          {
-            echo "final-message<<$delim"
-            cat pi-judge-output.md
-            echo "$delim"
-          } >> "$GITHUB_OUTPUT"
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          JUDGE_INPUT_FILE: judge-input.md
-
-      - name: Publish judge result to run summary
-        if: ${{ steps.run_judge.outputs.final-message != '' }}
-        env:
-          PI_FINAL_MESSAGE: ${{ steps.run_judge.outputs.final-message }}
-          PR_NUMBER: ${{ inputs.pr-number }}
-        run: |
-          {
-            echo "## Pi Judge"
-            echo
-            echo "PR #$PR_NUMBER"
-            echo
-            printf '%s\n' "$PI_FINAL_MESSAGE"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upsert judge comment
-        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment }}
+      - name: Upsert PR comment
+        if: steps.report.outputs.has-markdown == 'true' && env.POST_COMMENT == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          PI_FINAL_MESSAGE: ${{ steps.run_judge.outputs.final-message }}
-          PR_NUMBER: ${{ inputs.pr-number }}
+          REPORT_PATH: ${{ steps.report.outputs.path }}
         with:
           github-token: ${{ github.token }}
           script: |
+            const fs = require('fs');
             const marker = '<!-- pi-judge -->';
-            const body = `${marker}\n${process.env.PI_FINAL_MESSAGE}`;
+            const report = fs.readFileSync(process.env.REPORT_PATH, 'utf8');
+            const body = report.includes(marker) ? report : `${marker}\n${report}`;
             const issue_number = Number(process.env.PR_NUMBER);
 
             const { data: comments } = await github.rest.issues.listComments({
@@ -355,11 +301,9 @@ jobs:
               issue_number,
               per_page: 100,
             });
-
             const existing = comments.find(
               (c) => c.user?.type === 'Bot' && c.body?.includes(marker),
             );
-
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
@@ -367,8 +311,6 @@ jobs:
                 comment_id: existing.id,
                 body,
               });
-
-              // Un-minimize the comment in case it was marked as outdated
               try {
                 await github.graphql(`
                   mutation($id: ID!) {
@@ -387,12 +329,15 @@ jobs:
               });
             }
 
-      - name: Upload judge output
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
-          name: pi-judge-${{ inputs.pr-number }}-${{ github.run_id }}
+          name: adversarial-review-${{ env.PR_NUMBER }}-${{ github.run_id }}
           path: |
-            pi-judge-output.md
-            judge-input.md
+            ${{ runner.temp }}/changed-files.txt
+            ${{ runner.temp }}/workflow-inputs.json
+            ${{ runner.temp }}/workflow-run.json
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/report.md
           if-no-files-found: ignore

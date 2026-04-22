@@ -1,0 +1,14 @@
+manifestVersion: 1
+name: "@hivemq/adversarial-review"
+version: "2026.04.22.1"
+description: >-
+  Adversarial PR review: N parallel AI reviewers + a judge that verifies
+  findings against the code and synthesises a consensus review. Produces
+  structured JSON findings with an accompanying markdown report.
+models:
+  - adversarial_review/reviewer.ts
+  - adversarial_review/judge.ts
+reports:
+  - adversarial_review.ts
+workflows:
+  - workflow-dbe5f374-bcac-4366-9da5-0e1a0695fcc2.yaml

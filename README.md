@@ -1,28 +1,23 @@
 # hivemq-pi-review-action
 
-AI-powered pull request reviews using multiple models in parallel, with a judge step that synthesizes results.
+Adversarial AI PR reviews: N parallel reviewers + a judge that verifies findings
+against the code and synthesises a consensus review. Runs in GitHub Actions on
+PRs, and locally against uncommitted work via swamp.
 
-## Features
+## Components
 
-- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.4, Claude Sonnet 4.6, Gemini 3.1 Pro)
-- **Judge synthesis**: A judge model verifies issues against actual code, deduplicates, and produces a final consensus
-  review
-- **PR comment upsert**: Posts/updates a single judge comment on the PR (with `<!-- pi-judge -->` marker)
-- **Flexible triggers**: Supports `pull_request` (label), `issue_comment` (`/review`), and `workflow_dispatch`
+Everything lives in one repo, shipped as the `@hivemq/adversarial-review` swamp
+extension:
 
-## Architecture
+| Piece                                            | What it does                                                                                                                      |
+|--------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `@hivemq/adversarial-review/reviewer` (model)    | Factory: fans out N reviewers (Pi or Claude Code), emits a bundled `ReviewerOutput[]`.                                            |
+| `@hivemq/adversarial-review/judge` (model)       | Takes the bundle, verifies each finding against the code, dedups, emits `JudgeOutput`.                                            |
+| `@hivemq/adversarial-review/report` (report)     | Renders `JudgeOutput` as markdown suitable for a PR comment (with `<!-- pi-judge -->` marker for upsert).                         |
+| `workflows/workflow-….yaml` (swamp workflow)     | Wires reviewer → judge with `data.latest(...)` for the handoff.                                                                   |
+| `.github/workflows/pi-pr-review.yml` (reusable)  | GH Actions caller: resolves the triggering event, sets up swamp + Pi, runs the swamp workflow, upserts the PR comment.            |
 
-Two components work together:
-
-1. **Composite action** (`action.yml`) — Resolves GitHub event context in the caller's workflow. Determines whether to
-   run, extracts the PR number, and resolves the post-comment flag.
-2. **Reusable workflow** (`.github/workflows/pi-pr-review.yml`) — Performs the actual review. Runs a matrix of 3 models,
-   then a judge job that synthesizes results.
-
-This split is necessary because matrix strategy and multi-job workflows require a reusable workflow, while event
-analysis (`github.event.*`) is only available in the caller's context.
-
-## Usage
+## GitHub Actions usage
 
 Create `.github/workflows/pi-pr-review.yml` in your repository:
 
@@ -47,56 +42,12 @@ on:
         type: boolean
 
 jobs:
-  resolve:
-    runs-on: ubuntu-latest
-    outputs:
-      should-run: ${{ steps.resolve.outputs.should-run }}
-      pr-number: ${{ steps.resolve.outputs.pr-number }}
-      post-comment: ${{ steps.resolve.outputs.post-comment }}
-    steps:
-      - id: resolve
-        uses: hivemq/hivemq-pi-review-action@v1
-
   review:
-    needs: resolve
-    if: needs.resolve.outputs.should-run == 'true'
     uses: hivemq/hivemq-pi-review-action/.github/workflows/pi-pr-review.yml@v1
-    with:
-      pr-number: ${{ fromJson(needs.resolve.outputs.pr-number) }}
-      post-comment: ${{ fromJson(needs.resolve.outputs.post-comment) }}
-    secrets:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    secrets: inherit
 ```
 
-## Composite Action Outputs
-
-| Output         | Description                                          |
-|----------------|------------------------------------------------------|
-| `should-run`   | Whether the review should run (`true`/`false`)       |
-| `pr-number`    | The PR number to review                              |
-| `post-comment` | Whether to post/update a PR comment (`true`/`false`) |
-
-## Reusable Workflow Inputs
-
-| Input          | Type      | Required | Default | Description                               |
-|----------------|-----------|----------|---------|-------------------------------------------|
-| `pr-number`    | `number`  | yes      | —       | PR number to review                       |
-| `post-comment` | `boolean` | no       | `true`  | Post/update PR comment with judge results |
-| `runner-label` | `string`  | no       | `pi`    | Runner label for review/judge jobs        |
-
-## Required Secrets
-
-| Secret               | Description                                   |
-|----------------------|-----------------------------------------------|
-| `OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.4 and judge)    |
-| `OPENROUTER_API_KEY` | OpenRouter API key (used by Gemini 3.1 Pro)   |
-| `ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Sonnet 4.6) |
-
-## Event Handling
-
-The composite action handles three event types:
+Triggers:
 
 | Event               | Condition                              | post-comment                  |
 |---------------------|----------------------------------------|-------------------------------|
@@ -104,6 +55,95 @@ The composite action handles three event types:
 | `issue_comment`     | PR comment starting with `/review`     | `true`                        |
 | `pull_request`      | Non-draft PR with `review` label added | `true`                        |
 
+## Reusable workflow inputs
+
+| Input             | Type     | Default                         | Description                                          |
+|-------------------|----------|---------------------------------|------------------------------------------------------|
+| `runner-label`    | `string` | `pi`                            | Runner label for the review job.                     |
+| `reviewer-models` | `string` | 3-model ensemble (GPT/Sonnet/Gemini) | JSON array of `{id, thinking?}` reviewer configs. |
+| `judge-model`     | `string` | `{"id":"openai/gpt-5.4","thinking":"medium"}` | JSON object for the judge config. |
+
+## Required secrets
+
+| Secret               | Description                                   |
+|----------------------|-----------------------------------------------|
+| `OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.4 and judge)    |
+| `OPENROUTER_API_KEY` | OpenRouter API key (used by Gemini 3.1 Pro)   |
+| `ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Sonnet 4.6) |
+
+## Local usage
+
+The same swamp workflow runs on your laptop, reviewing committed or
+uncommitted work using your Claude Max plan (no API keys required).
+
+```bash
+# One-time setup in a swamp repo
+swamp extension source add ~/path/to/hivemq-pi-review-action/extensions
+swamp model create @hivemq/adversarial-review/reviewer adversarial-reviewers
+swamp model create @hivemq/adversarial-review/judge    adversarial-judge
+
+# Review uncommitted work
+cd ~/your-project
+git diff --name-status > /tmp/changed.txt
+swamp workflow run adversarial-review \
+  --input changedFiles="$(cat /tmp/changed.txt)" \
+  --input repoPath="$PWD"
+
+# Render the report
+swamp report get @hivemq/adversarial-review/report --model adversarial-judge --json \
+  | jq -r .markdown
+```
+
+By default, the workflow runs one `claude-code` reviewer + one `claude-code`
+judge on Max-auth. Pass `--input models=…` and `--input judge=…` to change.
+
+## Architecture
+
+```
+GH Actions / local caller
+          │
+          ▼
+┌──────────────────────────┐
+│ swamp workflow           │
+│ (adversarial-review)     │
+│                          │
+│ ┌──────────────────────┐ │
+│ │ reviewer (factory)   │ │   Pi / Claude Code subprocesses,
+│ │  → reviewerBundle    │ │   fanned out with Promise.allSettled.
+│ └─────────┬────────────┘ │
+│           │              │
+│ ┌─────────▼────────────┐ │
+│ │ judge                │ │   Reads cited code, verifies, dedups,
+│ │  → judgeOutput       │ │   emits final findings.
+│ └──────────────────────┘ │
+└───────────┬──────────────┘
+            │
+            ▼
+    report extension
+    → markdown + json
+            │
+            ▼
+    PR comment upsert
+    (CI only)
+```
+
+## Developing this repo
+
+Prompts are `.md` files in `extensions/models/adversarial_review/prompts/` and
+get inlined into `prompts.ts` at build time (deno's bundler doesn't preserve
+extension-relative paths stably — see swamp.club/lab/146).
+
+```bash
+# regenerate prompts.ts after editing prompts/*.md
+./scripts/gen-prompts.sh
+
+# pre-push: regen + swamp extension push
+./scripts/push.sh
+
+# CI drift check
+./scripts/check-prompts.sh
+```
+
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
+Apache License 2.0 — see [LICENSE](LICENSE) for details.

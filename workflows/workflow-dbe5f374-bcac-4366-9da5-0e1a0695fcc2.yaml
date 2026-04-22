@@ -1,0 +1,76 @@
+id: dbe5f374-bcac-4366-9da5-0e1a0695fcc2
+name: "@hivemq/adversarial-review"
+description: >-
+  Run N parallel AI reviewers over a diff and synthesize with a judge. Produces
+  structured findings; the @hivemq/adversarial-review/report extension renders
+  them as PR-comment markdown.
+tags: {}
+version: 1
+inputs:
+  properties:
+    changedFiles:
+      type: string
+      description: "Output of `git diff --name-status base...head`."
+    repoPath:
+      type: string
+      description: "Filesystem path to the repo checkout the agents will read."
+    models:
+      type: array
+      description: "Reviewer model configs. Defaults to a single claude-code reviewer."
+      items:
+        type: object
+      default:
+        - id: claude-code
+    judge:
+      type: object
+      description: "Judge model config. Defaults to claude-code."
+      default:
+        id: claude-code
+    metadata:
+      type: object
+      description: "Optional PR metadata (title, url, baseRef/baseSha, headRef/headSha)."
+      default: {}
+  required:
+    - changedFiles
+    - repoPath
+jobs:
+  - name: review
+    description: Run all reviewers in parallel (factory pattern inside the model).
+    steps:
+      - name: run-reviewers
+        description: Invoke the reviewer model with the diff + model list.
+        task:
+          type: model_method
+          modelIdOrName: adversarial-reviewers
+          methodName: run
+          inputs:
+            models: ${{ inputs.models }}
+            changedFiles: ${{ inputs.changedFiles }}
+            repoPath: ${{ inputs.repoPath }}
+            metadata: ${{ inputs.metadata }}
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+    dependsOn: []
+    weight: 0
+  - name: judge
+    description: Synthesize reviewer outputs into a single findings set.
+    dependsOn:
+      - job: review
+        condition:
+          type: succeeded
+    steps:
+      - name: run-judge
+        description: Invoke the judge model with the bundled reviewer outputs.
+        task:
+          type: model_method
+          modelIdOrName: adversarial-judge
+          methodName: run
+          inputs:
+            reviewers: ${{ data.latest("adversarial-reviewers", "main").attributes.outputs }}
+            repoPath: ${{ inputs.repoPath }}
+            judge: ${{ inputs.judge }}
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+    weight: 0
