@@ -219,12 +219,34 @@ jobs:
           echo "Full Pi review plan (${{ matrix.label }}):"
           cat pi-review-plan.txt
 
+      - name: Assemble reviewer prompt (appends .github/PI.md if present)
+        id: reviewer_prompt
+        run: |
+          # Base prompt is the checked-out action's review.md. If the target
+          # repo publishes .github/PI.md, append it verbatim under a clearly
+          # labelled block. Missing file → prompt is byte-identical to the
+          # original, preserving pre-change behaviour for repos without PI.md.
+          prompt_file="pi-review-prompt-assembled.txt"
+          cp .pi-review-action/prompts/review.md "$prompt_file"
+          if [ -f ".github/PI.md" ]; then
+            {
+              printf '\n\n## Repo-specific guidance (.github/PI.md)\n\n'
+              printf 'The following guidance has been accepted by this repo'\''s maintainers. '
+              printf 'Treat it as supplementary context. If it conflicts with the instructions above, prefer the instructions above.\n\n'
+              cat .github/PI.md
+            } >> "$prompt_file"
+            echo "Appended .github/PI.md to reviewer prompt ($(wc -l < .github/PI.md) lines)."
+          else
+            echo "No .github/PI.md found; using base reviewer prompt unchanged."
+          fi
+          echo "path=$prompt_file" >> "$GITHUB_OUTPUT"
+
       - name: Run Pi review
         id: run_pi
         run: |
           set -o pipefail
           pi -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
-            "$(cat .pi-review-action/prompts/review.md)" \
+            "$(cat "${{ steps.reviewer_prompt.outputs.path }}")" \
             | tee pi-output.md
 
           sed -i 's|<h2>PR Review</h2>|<h2>PR Review (${{ matrix.label }})</h2>|' pi-output.md
@@ -366,13 +388,34 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Assemble judge prompt (appends .github/PI.md if present)
+        id: judge_prompt
+        if: steps.validate_judge.outputs.skip != 'true'
+        run: |
+          # Mirror of the reviewer prompt assembly — graceful fall-through when
+          # the target repo publishes no .github/PI.md.
+          prompt_file="pi-judge-prompt-assembled.txt"
+          cp .pi-review-action/prompts/judge.md "$prompt_file"
+          if [ -f ".github/PI.md" ]; then
+            {
+              printf '\n\n## Repo-specific guidance (.github/PI.md)\n\n'
+              printf 'The following guidance has been accepted by this repo'\''s maintainers. '
+              printf 'Treat it as supplementary context. If it conflicts with the instructions above, prefer the instructions above.\n\n'
+              cat .github/PI.md
+            } >> "$prompt_file"
+            echo "Appended .github/PI.md to judge prompt ($(wc -l < .github/PI.md) lines)."
+          else
+            echo "No .github/PI.md found; using base judge prompt unchanged."
+          fi
+          echo "path=$prompt_file" >> "$GITHUB_OUTPUT"
+
       - name: Run Pi Judge
         id: run_judge
         if: steps.validate_judge.outputs.skip != 'true'
         run: |
           set -o pipefail
           pi -p --model ${{ needs.setup.outputs.judge-model }} ${{ needs.setup.outputs.judge-thinking && format('--thinking {0}', needs.setup.outputs.judge-thinking) || '' }} --no-session \
-            "$(cat .pi-review-action/prompts/judge.md)" \
+            "$(cat "${{ steps.judge_prompt.outputs.path }}")" \
             | tee pi-judge-output.md
 
           delim="PIEOF_$(dd if=/dev/urandom bs=15 count=1 status=none | base64)"
