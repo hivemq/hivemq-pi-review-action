@@ -251,13 +251,16 @@ jobs:
             if [ -n "$reviewer_bullets" ] || [ -n "$donotflag_bullets" ]; then
               {
                 printf '\n\n## Repo-specific guidance (.github/PI.yaml)\n\n'
-                printf 'The following rules have been accepted by this repo'\''s maintainers. '
-                printf 'Treat them as supplementary context for reviewing. If they conflict with the instructions above, prefer the instructions above.\n'
+                printf 'These rules are repository-specific guidance derived from recurring signals in historical Pi review outcomes on this repo. '
+                printf 'They were accepted via maintainer review and reflect patterns this repo wants future reviews to respect. '
+                printf '**Apply them alongside — not instead of — the instructions above. On conflict, the core instructions above win.**\n'
               } >> "$prompt_file"
 
               if [ -n "$reviewer_bullets" ]; then
                 {
-                  printf '\n### Reviewer rules\n\n'
+                  printf '\n### Reviewer rules\n'
+                  printf 'When inspecting this PR, use these rules to guide what you flag and how you phrase it. '
+                  printf 'Each was distilled from recurring feedback on prior merged PRs here.\n\n'
                   printf '%s\n' "$reviewer_bullets"
                 } >> "$prompt_file"
                 appended_sections="reviewer"
@@ -266,7 +269,8 @@ jobs:
               if [ -n "$donotflag_bullets" ]; then
                 {
                   printf '\n### Do not raise these patterns\n'
-                  printf 'The repo has determined these are not productive to flag.\n\n'
+                  printf 'The repository has determined that flagging the patterns below wastes reviewer and author attention — prior authors consistently ignored or declined them. '
+                  printf '**Do not raise issues matching these patterns.** If you see code that would otherwise trigger such a flag, omit it from your output.\n\n'
                   printf '%s\n' "$donotflag_bullets"
                 } >> "$prompt_file"
                 appended_sections="${appended_sections:+$appended_sections+}do_not_flag"
@@ -456,13 +460,16 @@ jobs:
             if [ -n "$judge_bullets" ] || [ -n "$donotflag_bullets" ]; then
               {
                 printf '\n\n## Repo-specific guidance (.github/PI.yaml)\n\n'
-                printf 'The following rules have been accepted by this repo'\''s maintainers. '
-                printf 'Treat them as supplementary context for judging. If they conflict with the instructions above, prefer the instructions above.\n'
+                printf 'These rules are repository-specific guidance derived from recurring signals in historical Pi review outcomes on this repo. '
+                printf 'They were accepted via maintainer review and reflect patterns this repo wants future reviews to respect. '
+                printf '**Apply them alongside — not instead of — the instructions above. On conflict, the core instructions above win.**\n'
               } >> "$prompt_file"
 
               if [ -n "$judge_bullets" ]; then
                 {
-                  printf '\n### Judge rules\n\n'
+                  printf '\n### Judge rules\n'
+                  printf 'When filtering the reviewers'\'' issue lists, apply these rules in addition to your existing filtering logic. '
+                  printf 'Each was distilled from recurring signal in past Pi judge outcomes on this repo.\n\n'
                   printf '%s\n' "$judge_bullets"
                 } >> "$prompt_file"
                 appended_sections="judge"
@@ -471,7 +478,8 @@ jobs:
               if [ -n "$donotflag_bullets" ]; then
                 {
                   printf '\n### Drop these patterns if a reviewer raised them\n'
-                  printf 'The repo has determined these are not productive to flag.\n\n'
+                  printf 'This is a backstop. Reviewers have been told not to raise these patterns, but if one slipped through, drop it from the final output. '
+                  printf 'The repository has determined these are unproductive to flag.\n\n'
                   printf '%s\n' "$donotflag_bullets"
                 } >> "$prompt_file"
                 appended_sections="${appended_sections:+$appended_sections+}do_not_flag"
