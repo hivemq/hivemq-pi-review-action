@@ -172,13 +172,11 @@ jobs:
         if: steps.deps.outputs.need_pi == 'true'
         run: sudo npm install -g @mariozechner/pi-coding-agent
 
-      - name: Ensure yq is installed (needed for .github/PI.yaml extraction)
-        run: |
-          if ! command -v yq >/dev/null 2>&1; then
-            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
-            sudo chmod +x /usr/local/bin/yq
-          fi
-          yq --version
+      - name: Set up Homebrew (for yq)
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Install yq
+        run: brew install yq
 
       - name: Print Pi version
         run: pi --version
@@ -227,61 +225,21 @@ jobs:
           echo "Full Pi review plan (${{ matrix.label }}):"
           cat pi-review-plan.txt
 
-      - name: Assemble reviewer prompt (appends .github/PI.yaml sections)
+      - name: Assemble reviewer prompt (appends .github/PI.yaml .reviewer)
         id: reviewer_prompt
         run: |
-          # Base prompt is the checked-out action's review.md. If the target
-          # repo publishes .github/PI.yaml, extract only the sections relevant
-          # to the reviewer: `reviewer` (direct guidance) and `do_not_flag`
-          # (patterns reviewers shouldn't raise). The `judge` section is
-          # deliberately NOT appended here — that's filtering scope, not
-          # reviewer scope. Missing file or empty sections → base prompt
-          # unchanged, preserving pre-change behaviour.
           prompt_file="pi-review-prompt-assembled.txt"
           cp .pi-review-action/prompts/review.md "$prompt_file"
 
-          appended_sections=""
+          block=""
           if [ -f ".github/PI.yaml" ]; then
-            # yq prints `- <text>\n` per rule, or nothing when the section is
-            # missing/empty. Both .reviewer and .do_not_flag are lists of
-            # {id, text, added, evidence} maps.
-            reviewer_bullets="$(yq -r '(.reviewer // []) | .[] | "- " + .text' .github/PI.yaml)"
-            donotflag_bullets="$(yq -r '(.do_not_flag // []) | .[] | "- " + .text' .github/PI.yaml)"
-
-            if [ -n "$reviewer_bullets" ] || [ -n "$donotflag_bullets" ]; then
-              {
-                printf '\n\n## Repo-specific guidance (.github/PI.yaml)\n\n'
-                printf 'These rules are repository-specific guidance derived from recurring signals in historical Pi review outcomes on this repo. '
-                printf 'They were accepted via maintainer review and reflect patterns this repo wants future reviews to respect. '
-                printf '**Apply them alongside — not instead of — the instructions above. On conflict, the core instructions above win.**\n'
-              } >> "$prompt_file"
-
-              if [ -n "$reviewer_bullets" ]; then
-                {
-                  printf '\n### Reviewer rules\n'
-                  printf 'When inspecting this PR, use these rules to guide what you flag and how you phrase it. '
-                  printf 'Each was distilled from recurring feedback on prior merged PRs here.\n\n'
-                  printf '%s\n' "$reviewer_bullets"
-                } >> "$prompt_file"
-                appended_sections="reviewer"
-              fi
-
-              if [ -n "$donotflag_bullets" ]; then
-                {
-                  printf '\n### Do not raise these patterns\n'
-                  printf 'The repository has determined that flagging the patterns below wastes reviewer and author attention — prior authors consistently ignored or declined them. '
-                  printf '**Do not raise issues matching these patterns.** If you see code that would otherwise trigger such a flag, omit it from your output.\n\n'
-                  printf '%s\n' "$donotflag_bullets"
-                } >> "$prompt_file"
-                appended_sections="${appended_sections:+$appended_sections+}do_not_flag"
-              fi
-            fi
+            block="$(yq -r '.reviewer // ""' .github/PI.yaml)"
           fi
-
-          if [ -n "$appended_sections" ]; then
-            echo "Appended PI.yaml sections to reviewer prompt: $appended_sections."
+          if [ -n "$block" ]; then
+            printf '\n%s\n' "$block" >> "$prompt_file"
+            echo "Appended .reviewer block from .github/PI.yaml."
           else
-            echo "No applicable PI.yaml sections for reviewer; using base prompt unchanged."
+            echo "No .reviewer block in .github/PI.yaml; using base prompt unchanged."
           fi
           echo "path=$prompt_file" >> "$GITHUB_OUTPUT"
 
@@ -402,13 +360,11 @@ jobs:
         if: steps.deps.outputs.need_pi == 'true'
         run: sudo npm install -g @mariozechner/pi-coding-agent
 
-      - name: Ensure yq is installed (needed for .github/PI.yaml extraction)
-        run: |
-          if ! command -v yq >/dev/null 2>&1; then
-            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
-            sudo chmod +x /usr/local/bin/yq
-          fi
-          yq --version
+      - name: Set up Homebrew (for yq)
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Install yq
+        run: brew install yq
 
       - name: Print Pi version
         run: pi --version
@@ -440,57 +396,22 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Assemble judge prompt (appends .github/PI.yaml sections)
+      - name: Assemble judge prompt (appends .github/PI.yaml .judge)
         id: judge_prompt
         if: steps.validate_judge.outputs.skip != 'true'
         run: |
-          # Judge gets only the sections relevant to filtering: `judge` (direct
-          # judge guidance) and `do_not_flag` (patterns to drop if a reviewer
-          # raised them anyway — defence in depth). The `reviewer` section is
-          # NOT appended — that's reviewer scope, not judge scope. Missing file
-          # or empty sections → base prompt unchanged.
           prompt_file="pi-judge-prompt-assembled.txt"
           cp .pi-review-action/prompts/judge.md "$prompt_file"
 
-          appended_sections=""
+          block=""
           if [ -f ".github/PI.yaml" ]; then
-            judge_bullets="$(yq -r '(.judge // []) | .[] | "- " + .text' .github/PI.yaml)"
-            donotflag_bullets="$(yq -r '(.do_not_flag // []) | .[] | "- " + .text' .github/PI.yaml)"
-
-            if [ -n "$judge_bullets" ] || [ -n "$donotflag_bullets" ]; then
-              {
-                printf '\n\n## Repo-specific guidance (.github/PI.yaml)\n\n'
-                printf 'These rules are repository-specific guidance derived from recurring signals in historical Pi review outcomes on this repo. '
-                printf 'They were accepted via maintainer review and reflect patterns this repo wants future reviews to respect. '
-                printf '**Apply them alongside — not instead of — the instructions above. On conflict, the core instructions above win.**\n'
-              } >> "$prompt_file"
-
-              if [ -n "$judge_bullets" ]; then
-                {
-                  printf '\n### Judge rules\n'
-                  printf 'When filtering the reviewers'\'' issue lists, apply these rules in addition to your existing filtering logic. '
-                  printf 'Each was distilled from recurring signal in past Pi judge outcomes on this repo.\n\n'
-                  printf '%s\n' "$judge_bullets"
-                } >> "$prompt_file"
-                appended_sections="judge"
-              fi
-
-              if [ -n "$donotflag_bullets" ]; then
-                {
-                  printf '\n### Drop these patterns if a reviewer raised them\n'
-                  printf 'This is a backstop. Reviewers have been told not to raise these patterns, but if one slipped through, drop it from the final output. '
-                  printf 'The repository has determined these are unproductive to flag.\n\n'
-                  printf '%s\n' "$donotflag_bullets"
-                } >> "$prompt_file"
-                appended_sections="${appended_sections:+$appended_sections+}do_not_flag"
-              fi
-            fi
+            block="$(yq -r '.judge // ""' .github/PI.yaml)"
           fi
-
-          if [ -n "$appended_sections" ]; then
-            echo "Appended PI.yaml sections to judge prompt: $appended_sections."
+          if [ -n "$block" ]; then
+            printf '\n%s\n' "$block" >> "$prompt_file"
+            echo "Appended .judge block from .github/PI.yaml."
           else
-            echo "No applicable PI.yaml sections for judge; using base prompt unchanged."
+            echo "No .judge block in .github/PI.yaml; using base prompt unchanged."
           fi
           echo "path=$prompt_file" >> "$GITHUB_OUTPUT"
 
