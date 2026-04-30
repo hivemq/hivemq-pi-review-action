@@ -4,7 +4,7 @@ AI-powered pull request reviews using multiple models in parallel, with a judge 
 
 ## Features
 
-- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.4, Claude Sonnet 4.6, Gemini 3.1 Pro)
+- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.5, Claude Sonnet 4.6, Gemini 3.1 Pro)
 - **Judge synthesis**: A judge model verifies issues against actual code, deduplicates, and produces a final consensus
   review
 - **PR comment upsert**: Posts/updates a single judge comment on the PR (with `<!-- pi-judge -->` marker)
@@ -97,7 +97,7 @@ jobs:
 
 | Secret               | Description                                   |
 |----------------------|-----------------------------------------------|
-| `OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.4 and judge)    |
+| `OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.5 and judge)    |
 | `OPENROUTER_API_KEY` | OpenRouter API key (used by Gemini 3.1 Pro)   |
 | `ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Sonnet 4.6) |
 
@@ -109,11 +109,11 @@ the following defaults are used:
 ```json
 {
   "review": [
-    { "model": "openai/gpt-5.4", "thinking": "medium", "label": "gpt-5.4" },
+    { "model": "openai/gpt-5.5", "thinking": "medium", "label": "gpt-5.5" },
     { "model": "anthropic/claude-sonnet-4-6", "thinking": "medium", "label": "claude-sonnet-4.6" },
     { "model": "openrouter/google/gemini-3.1-pro-preview", "label": "gemini-3.1-pro" }
   ],
-  "judge": { "model": "openai/gpt-5.4", "thinking": "medium" }
+  "judge": { "model": "openai/gpt-5.5", "thinking": "medium" }
 }
 ```
 
