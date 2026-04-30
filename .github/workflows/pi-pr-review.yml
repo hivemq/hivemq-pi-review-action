@@ -52,11 +52,11 @@ jobs:
           script: |
             const defaultConfig = {
               review: [
-                { model: 'openai/gpt-5.4', thinking: 'medium', label: 'gpt-5.4' },
+                { model: 'openai/gpt-5.5', thinking: 'medium', label: 'gpt-5.5' },
                 { model: 'anthropic/claude-sonnet-4-6', thinking: 'medium', label: 'claude-sonnet-4.6' },
                 { model: 'openrouter/google/gemini-3.1-pro-preview', label: 'gemini-3.1-pro' },
               ],
-              judge: { model: 'openai/gpt-5.4', thinking: 'medium' },
+              judge: { model: 'openai/gpt-5.5', thinking: 'medium' },
             };
 
             const raw = process.env.PI_REVIEW_MODELS;
