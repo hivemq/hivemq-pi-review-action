@@ -175,7 +175,7 @@ jobs:
         run: sudo npm install -g @mariozechner/pi-coding-agent
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@996ddca5fc18b6bef4882270edbe9ef95bfffd87 # master
+        uses: Homebrew/actions/setup-homebrew@cf31444e770b9919bb21e695d66f56c39cfd3dee # master
 
       - name: Install yq
         run: brew install yq
@@ -365,7 +365,7 @@ jobs:
         run: sudo npm install -g @mariozechner/pi-coding-agent
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@996ddca5fc18b6bef4882270edbe9ef95bfffd87 # master
+        uses: Homebrew/actions/setup-homebrew@cf31444e770b9919bb21e695d66f56c39cfd3dee # master
 
       - name: Install yq
         run: brew install yq
