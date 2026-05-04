@@ -29,6 +29,8 @@ on:
         required: true
       ANTHROPIC_API_KEY:
         required: true
+      DEEPSEEK_API_KEY:
+        required: false
 
 concurrency:
   group: pi-review-${{ inputs.pr-number }}
@@ -204,6 +206,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
           PR_URL: ${{ steps.pr_context.outputs.url }}
@@ -263,6 +266,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
           PR_URL: ${{ steps.pr_context.outputs.url }}
@@ -432,6 +436,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           JUDGE_INPUT_FILE: judge-input.md
 
       - name: Publish judge result to run summary
