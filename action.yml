@@ -55,10 +55,16 @@ runs:
           fi
 
         elif [ "${{ github.event_name }}" = "pull_request" ]; then
-          # Only trigger on non-draft PRs with the 'review' label
           is_draft="${{ github.event.pull_request.draft }}"
           label_name="${{ github.event.label.name }}"
-          if [ "$is_draft" != "true" ] && [ "$label_name" = "review" ]; then
+          # Two label triggers:
+          #   'review'        — the standard trigger; gated to non-draft PRs so
+          #                     that an auto-applied 'review' label never starts
+          #                     a review on a draft.
+          #   'manual-review' — an explicit, manually-added label that triggers
+          #                     regardless of draft state, letting authors get a
+          #                     Pi review before marking the PR ready for review.
+          if { [ "$label_name" = "review" ] && [ "$is_draft" != "true" ]; } || [ "$label_name" = "manual-review" ]; then
             should_run=true
             pr_number="${{ github.event.pull_request.number }}"
             post_comment=true

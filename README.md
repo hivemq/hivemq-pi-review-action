@@ -129,7 +129,7 @@ The composite action handles three event types:
 |---------------------|----------------------------------------|-------------------------------|
 | `workflow_dispatch` | Always runs                            | From input (default: `false`) |
 | `issue_comment`     | PR comment starting with `/review` by allowed author association | `true`                        |
-| `pull_request`      | Non-draft PR with `review` label added | `true`                        |
+| `pull_request`      | Non-draft PR with `review` label added, or any PR (incl. drafts) with `manual-review` label added | `true`                        |
 
 ## License
 
