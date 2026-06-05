@@ -4,7 +4,7 @@ AI-powered pull request reviews using multiple models in parallel, with a judge 
 
 ## Features
 
-- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.5, Claude Sonnet 4.6, Gemini 3.1 Pro)
+- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.5, Claude Opus 4.8, DeepSeek v4 Pro)
 - **Judge synthesis**: A judge model verifies issues against actual code, deduplicates, and produces a final consensus
   review
 - **PR comment upsert**: Posts/updates a single judge comment on the PR (with `<!-- pi-judge -->` marker)
@@ -65,10 +65,10 @@ jobs:
       pr-number: ${{ fromJson(needs.resolve.outputs.pr-number) }}
       post-comment: ${{ fromJson(needs.resolve.outputs.post-comment) }}
     secrets:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      PI_OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
+      PI_OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
+      PI_ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
+      PI_DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
 ```
 
 ## Composite Action Inputs
@@ -96,11 +96,14 @@ jobs:
 
 ## Required Secrets
 
-| Secret               | Description                                   |
-|----------------------|-----------------------------------------------|
-| `OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.5 and judge)    |
-| `OPENROUTER_API_KEY` | OpenRouter API key (used by Gemini 3.1 Pro)   |
-| `ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Sonnet 4.6) |
+| Secret                  | Description                                   |
+|-------------------------|-----------------------------------------------|
+| `PI_OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.5 and judge)    |
+| `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (used by DeepSeek v4 Pro)    |
+| `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 4.8)   |
+| `PI_OPENROUTER_API_KEY` | OpenRouter API key (optional; for OpenRouter models) |
+
+The legacy un-prefixed names (e.g. `ANTHROPIC_API_KEY`) are still accepted as a fallback during migration.
 
 ## Model Configuration
 
@@ -111,8 +114,8 @@ the following defaults are used:
 {
   "review": [
     { "model": "openai/gpt-5.5", "thinking": "medium", "label": "gpt-5.5" },
-    { "model": "anthropic/claude-sonnet-4-6", "thinking": "medium", "label": "claude-sonnet-4.6" },
-    { "model": "openrouter/google/gemini-3.1-pro-preview", "label": "gemini-3.1-pro" }
+    { "model": "anthropic/claude-opus-4-8", "thinking": "medium", "label": "claude-opus-4.8" },
+    { "model": "deepseek/deepseek-v4-pro", "thinking": "high", "label": "deepseek-v4-pro" }
   ],
   "judge": { "model": "openai/gpt-5.5", "thinking": "medium" }
 }
