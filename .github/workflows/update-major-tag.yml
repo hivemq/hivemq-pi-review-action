@@ -1,0 +1,29 @@
+name: Update major tag
+
+# Keeps the floating `v1` tag pointing at the latest commit on `main`, so
+# consumers pinned to `@v1` always run the newest changes without a manual
+# tag move. Bump the major below when cutting a breaking `v2`.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-major-tag
+  cancel-in-progress: true
+
+jobs:
+  update-major-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Move v1 tag to latest main
+        run: |
+          git tag -f v1
+          git push origin v1 --force

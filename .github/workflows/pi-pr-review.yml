@@ -23,12 +23,25 @@ on:
         default: 'v1'
         type: string
     secrets:
+      # Canonical PI_-prefixed secrets. All optional so legacy callers (which
+      # pass the un-prefixed names below) keep working during migration; the
+      # run fails with a clear auth error only if neither name is provided.
+      PI_OPENAI_API_KEY:
+        required: false
+      PI_OPENROUTER_API_KEY:
+        required: false
+      PI_ANTHROPIC_API_KEY:
+        required: false
+      PI_DEEPSEEK_API_KEY:
+        required: false
+      # Deprecated legacy aliases — kept for back-compat, remove once all
+      # consumers have migrated to the PI_-prefixed names.
       OPENAI_API_KEY:
-        required: true
+        required: false
       OPENROUTER_API_KEY:
-        required: true
+        required: false
       ANTHROPIC_API_KEY:
-        required: true
+        required: false
       DEEPSEEK_API_KEY:
         required: false
 
@@ -55,8 +68,8 @@ jobs:
             const defaultConfig = {
               review: [
                 { model: 'openai/gpt-5.5', thinking: 'medium', label: 'gpt-5.5' },
-                { model: 'anthropic/claude-sonnet-4-6', thinking: 'medium', label: 'claude-sonnet-4.6' },
-                { model: 'openrouter/google/gemini-3.1-pro-preview', label: 'gemini-3.1-pro' },
+                { model: 'anthropic/claude-opus-4-8', thinking: 'medium', label: 'claude-opus-4.8' },
+                { model: 'deepseek/deepseek-v4-pro', thinking: 'high', label: 'deepseek-v4-pro' },
               ],
               judge: { model: 'openai/gpt-5.5', thinking: 'medium' },
             };
@@ -203,10 +216,10 @@ jobs:
             "$(cat pi-review-prompt.txt)" \
             | tee pi-review-plan.txt
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY || secrets.DEEPSEEK_API_KEY }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
           PR_URL: ${{ steps.pr_context.outputs.url }}
@@ -263,10 +276,10 @@ jobs:
             echo "$delim"
           } >> "$GITHUB_OUTPUT"
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY || secrets.DEEPSEEK_API_KEY }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
           PR_URL: ${{ steps.pr_context.outputs.url }}
@@ -435,10 +448,10 @@ jobs:
             echo "$delim"
           } >> "$GITHUB_OUTPUT"
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY || secrets.DEEPSEEK_API_KEY }}
           JUDGE_INPUT_FILE: judge-input.md
 
       - name: Publish judge result to run summary
