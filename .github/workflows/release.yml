@@ -19,6 +19,6 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
 
       - name: Update major tag
-        uses: cssnr/update-version-tags-action@f3849a957cc45bae43abd0b41566ab269ec4fe02 # v2
+        uses: cssnr/update-version-tags-action@dc7077eaec04b8fd61f7b7e6d4830564cfd12382 # v2
         with:
           minor: false
