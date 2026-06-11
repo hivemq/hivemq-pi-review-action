@@ -150,17 +150,16 @@ runs:
           // --- Assemble review body ---
 
           let reviewBody = '<!-- pi-judge -->\n';
-          const allFindings = [...onDiff, ...offDiff];
-          if (allFindings.length > 0) {
+          if (comments.length > 0) {
             const counts = {};
-            for (const c of allFindings) {
+            for (const c of comments) {
               counts[c.severity] = (counts[c.severity] || 0) + 1;
             }
             const severityOrder = ['critical', 'high', 'medium', 'low'];
             const parts = severityOrder
               .filter(s => counts[s])
               .map(s => `${counts[s]} ${s}`);
-            reviewBody += `${allFindings.length} findings (${parts.join(', ')}). See inline review comments for details.\n`;
+            reviewBody += `${comments.length} findings (${parts.join(', ')}). See inline review comments for details.\n`;
           } else {
             reviewBody += 'No actionable findings.\n';
           }
