@@ -79,22 +79,24 @@ runs:
             return;
           }
 
-          // --- Dismiss previous bot reviews ---
+          // --- Minimize previous bot reviews ---
 
+          const marker = '<!-- pi-judge -->';
           const { data: reviews } = await github.rest.pulls.listReviews({
             owner, repo, pull_number,
           });
           for (const review of reviews) {
-            if (review.user?.type === 'Bot' && review.state === 'COMMENTED') {
-              try {
-                await github.rest.pulls.dismissReview({
-                  owner, repo, pull_number,
-                  review_id: review.id,
-                  message: 'Superseded by new Pi review run.',
-                });
-              } catch (e) {
-                core.warning(`Could not dismiss review ${review.id}: ${e.message}`);
-              }
+            if (review.user?.type !== 'Bot' || !review.body?.includes(marker)) continue;
+            try {
+              await github.graphql(`
+                mutation($id: ID!, $reason: ReportedContentClassifiers!) {
+                  minimizeComment(input: { subjectId: $id, classifier: $reason }) {
+                    minimizedComment { isMinimized }
+                  }
+                }
+              `, { id: review.node_id, reason: 'OUTDATED' });
+            } catch (e) {
+              core.warning(`Could not minimize review ${review.id}: ${e.message}`);
             }
           }
 
@@ -148,24 +150,25 @@ runs:
           // --- Assemble review body ---
 
           let reviewBody = '<!-- pi-judge -->\n';
-          if (offDiff.length > 0) {
-            reviewBody += '## Findings outside the diff\n\n';
-            for (const c of offDiff) {
-              const ref = c.start_line ? `${c.start_line}-${c.line}` : `${c.line}`;
-              reviewBody += `- **[${c.severity}]** \`${c.path}:${ref}\` — ${c.description}`;
-              if (c.source) reviewBody += ` *(${c.source})*`;
-              if (c.fix) reviewBody += `\n  **Fix:** ${c.fix}`;
-              reviewBody += '\n';
+          const allFindings = [...onDiff, ...offDiff];
+          if (allFindings.length > 0) {
+            const counts = {};
+            for (const c of allFindings) {
+              counts[c.severity] = (counts[c.severity] || 0) + 1;
             }
+            const severityOrder = ['critical', 'high', 'medium', 'low'];
+            const parts = severityOrder
+              .filter(s => counts[s])
+              .map(s => `${counts[s]} ${s}`);
+            reviewBody += `${allFindings.length} findings (${parts.join(', ')}). See inline review comments for details.\n`;
+          } else {
+            reviewBody += 'No actionable findings.\n';
           }
           if (questions.length > 0) {
             reviewBody += '\n## Questions\n\n';
             for (const q of questions) {
               reviewBody += `- ${q}\n`;
             }
-          }
-          if (reviewBody === '<!-- pi-judge -->\n') {
-            reviewBody += 'All findings posted as inline comments.';
           }
 
           // --- Submit review ---
@@ -176,3 +179,26 @@ runs:
             body: reviewBody,
             comments: onDiff,
           });
+
+          // --- Post off-diff findings as file-level comments ---
+
+          const { data: pr } = await github.rest.pulls.get({
+            owner, repo, pull_number,
+          });
+          for (const c of offDiff) {
+            const ref = c.start_line ? `${c.start_line}-${c.line}` : `${c.line}`;
+            const body = `**[${c.severity}]** \`${c.path}:${ref}\` — ${c.description}`
+              + (c.source ? `\n\n**Source:** ${c.source}` : '')
+              + (c.fix ? `\n\n**Fix:** ${c.fix}` : '');
+            try {
+              await github.rest.pulls.createReviewComment({
+                owner, repo, pull_number,
+                commit_id: pr.head.sha,
+                path: c.path,
+                subject_type: 'file',
+                body,
+              });
+            } catch (e) {
+              core.warning(`Could not post file-level comment on ${c.path}: ${e.message}`);
+            }
+          }
