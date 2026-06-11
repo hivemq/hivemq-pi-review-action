@@ -79,7 +79,7 @@ runs:
             return;
           }
 
-          // --- Minimize previous bot reviews ---
+          // --- Clean up previous bot reviews ---
 
           const marker = '<!-- pi-judge -->';
           const { data: reviews } = await github.rest.pulls.listReviews({
@@ -88,15 +88,22 @@ runs:
           for (const review of reviews) {
             if (review.user?.type !== 'Bot' || !review.body?.includes(marker)) continue;
             try {
-              await github.graphql(`
-                mutation($id: ID!, $reason: ReportedContentClassifiers!) {
-                  minimizeComment(input: { subjectId: $id, classifier: $reason }) {
-                    minimizedComment { isMinimized }
-                  }
-                }
-              `, { id: review.node_id, reason: 'OUTDATED' });
+              // Delete inline comments from the old review
+              const { data: reviewComments } = await github.rest.pulls.listCommentsForReview({
+                owner, repo, pull_number, review_id: review.id, per_page: 100,
+              });
+              for (const rc of reviewComments) {
+                await github.rest.pulls.deleteReviewComment({
+                  owner, repo, comment_id: rc.id,
+                });
+              }
+              // Replace the review body with a superseded notice
+              await github.rest.pulls.updateReview({
+                owner, repo, pull_number, review_id: review.id,
+                body: `${marker}\n*Superseded by newer review.*`,
+              });
             } catch (e) {
-              core.warning(`Could not minimize review ${review.id}: ${e.message}`);
+              core.warning(`Could not clean up review ${review.id}: ${e.message}`);
             }
           }
 
