@@ -162,11 +162,12 @@ runs:
             for (const c of comments) {
               counts[c.severity] = (counts[c.severity] || 0) + 1;
             }
+            const severityEmoji = { critical: '🔥', high: '⚠️', medium: '👀', low: '📝' };
             const severityOrder = ['critical', 'high', 'medium', 'low'];
             const parts = severityOrder
               .filter(s => counts[s])
-              .map(s => `${counts[s]} ${s}`);
-            reviewBody += `${comments.length} findings (${parts.join(', ')}). See inline review comments for details.\n`;
+              .map(s => `${severityEmoji[s]} **${counts[s]}** ${s}`);
+            reviewBody += `${parts.join(' · ')}\n\n${comments.length} findings. See inline review comments for details.\n`;
           } else {
             reviewBody += 'No actionable findings.\n';
           }
