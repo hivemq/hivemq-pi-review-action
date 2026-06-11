@@ -29,7 +29,7 @@ runs:
           // --- Parse judge HTML output ---
 
           const comments = [];
-          const issueRegex = /<li>\s*<strong>\[?(\w+)\]?<\/strong>\s*<code>([^<]+)<\/code>\s*-\s*([\s\S]*?)<\/li>/g;
+          const issueRegex = /<li>\s*<strong>\[?(\w+)\]?<\/strong>\s*<code>([^<]+)<\/code>\s*[-—–]\s*([\s\S]*?)<\/ul>\s*<\/li>/g;
           let match;
           while ((match = issueRegex.exec(judgeOutput)) !== null) {
             const severity = match[1];
