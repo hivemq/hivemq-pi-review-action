@@ -1,0 +1,176 @@
+name: 'Pi PR Review - Post Inline Review'
+description: 'Parses judge output and posts findings as inline PR review comments'
+inputs:
+  judge-output:
+    description: 'The judge Markdown/HTML output to parse'
+    required: true
+  pr-number:
+    description: 'Pull request number'
+    required: true
+  github-token:
+    description: 'GitHub token with pull-requests:write permission'
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: post
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+      env:
+        PI_FINAL_MESSAGE: ${{ inputs.judge-output }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const pull_number = Number(process.env.PR_NUMBER);
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const judgeOutput = process.env.PI_FINAL_MESSAGE;
+
+          // --- Parse judge HTML output ---
+
+          const comments = [];
+          const issueRegex = /<li>\s*<strong>\[(\w+)\]<\/strong>\s*<code>([^<]+)<\/code>\s*-\s*([\s\S]*?)<\/li>/g;
+          let match;
+          while ((match = issueRegex.exec(judgeOutput)) !== null) {
+            const severity = match[1];
+            const fileRef = match[2];
+            const rest = match[3];
+
+            const refMatch = fileRef.match(/^(.+?):(\d+)(?:-(\d+))?$/);
+            if (!refMatch) continue;
+
+            const path = refMatch[1];
+            const line = parseInt(refMatch[2], 10);
+            const endLine = refMatch[3] ? parseInt(refMatch[3], 10) : null;
+
+            const description = rest.replace(/<ul>[\s\S]*/, '').trim();
+
+            const sourceMatch = rest.match(/<strong>Source:<\/strong>\s*(.*?)<\/li>/);
+            const fixMatch = rest.match(/<strong>Fix:<\/strong>\s*(.*?)<\/li>/);
+
+            comments.push({
+              path,
+              line: endLine || line,
+              start_line: endLine ? line : null,
+              severity,
+              description,
+              source: sourceMatch ? sourceMatch[1].trim() : '',
+              fix: fixMatch ? fixMatch[1].trim() : '',
+            });
+          }
+
+          const questions = [];
+          const questionsSection = judgeOutput.match(/<h3>Questions<\/h3>([\s\S]*?)(?=<h3>|$)/);
+          if (questionsSection) {
+            const qRegex = /<li>([\s\S]*?)<\/li>/g;
+            let qMatch;
+            while ((qMatch = qRegex.exec(questionsSection[1])) !== null) {
+              const text = qMatch[1].trim();
+              if (text && !text.includes('None.')) {
+                questions.push(text);
+              }
+            }
+          }
+
+          if (comments.length === 0 && questions.length === 0) {
+            core.info('No inline comments or questions to post.');
+            return;
+          }
+
+          // --- Dismiss previous bot reviews ---
+
+          const { data: reviews } = await github.rest.pulls.listReviews({
+            owner, repo, pull_number,
+          });
+          for (const review of reviews) {
+            if (review.user?.type === 'Bot' && review.state === 'COMMENTED') {
+              try {
+                await github.rest.pulls.dismissReview({
+                  owner, repo, pull_number,
+                  review_id: review.id,
+                  message: 'Superseded by new Pi review run.',
+                });
+              } catch (e) {
+                core.warning(`Could not dismiss review ${review.id}: ${e.message}`);
+              }
+            }
+          }
+
+          // --- Partition comments into on-diff and off-diff ---
+
+          const { data: files } = await github.rest.pulls.listFiles({
+            owner, repo, pull_number, per_page: 300,
+          });
+
+          const diffLines = new Set();
+          for (const file of files) {
+            if (!file.patch) continue;
+            let lineNum = 0;
+            for (const patchLine of file.patch.split('\n')) {
+              const hunkMatch = patchLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)/);
+              if (hunkMatch) {
+                lineNum = parseInt(hunkMatch[1], 10);
+                continue;
+              }
+              if (patchLine.startsWith('-')) continue;
+              if (patchLine.startsWith('+') || patchLine.startsWith(' ')) {
+                diffLines.add(`${file.filename}:${lineNum}`);
+                lineNum++;
+              }
+            }
+          }
+
+          const formatBody = (c) => {
+            let body = `**[${c.severity}]** ${c.description}`;
+            if (c.source) body += `\n\n**Source:** ${c.source}`;
+            if (c.fix) body += `\n\n**Fix:** ${c.fix}`;
+            return body;
+          };
+
+          const onDiff = [];
+          const offDiff = [];
+          for (const c of comments) {
+            const key = `${c.path}:${c.line}`;
+            const startKey = c.start_line ? `${c.path}:${c.start_line}` : null;
+            if (diffLines.has(key) || (startKey && diffLines.has(startKey))) {
+              const comment = { path: c.path, line: c.line, body: formatBody(c) };
+              if (c.start_line && c.start_line !== c.line) {
+                comment.start_line = c.start_line;
+              }
+              onDiff.push(comment);
+            } else {
+              offDiff.push(c);
+            }
+          }
+
+          // --- Assemble review body ---
+
+          let reviewBody = '<!-- pi-judge -->\n';
+          if (offDiff.length > 0) {
+            reviewBody += '## Findings outside the diff\n\n';
+            for (const c of offDiff) {
+              const ref = c.start_line ? `${c.start_line}-${c.line}` : `${c.line}`;
+              reviewBody += `- **[${c.severity}]** \`${c.path}:${ref}\` — ${c.description}`;
+              if (c.source) reviewBody += ` *(${c.source})*`;
+              if (c.fix) reviewBody += `\n  **Fix:** ${c.fix}`;
+              reviewBody += '\n';
+            }
+          }
+          if (questions.length > 0) {
+            reviewBody += '\n## Questions\n\n';
+            for (const q of questions) {
+              reviewBody += `- ${q}\n`;
+            }
+          }
+          if (reviewBody === '<!-- pi-judge -->\n') {
+            reviewBody += 'All findings posted as inline comments.';
+          }
+
+          // --- Submit review ---
+
+          await github.rest.pulls.createReview({
+            owner, repo, pull_number,
+            event: 'COMMENT',
+            body: reviewBody,
+            comments: onDiff,
+          });

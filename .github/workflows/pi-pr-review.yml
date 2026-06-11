@@ -17,6 +17,11 @@ on:
         required: false
         default: 'pi'
         type: string
+      comment-style:
+        description: 'How to post review findings: "global" for a single PR comment, "inline" for a PR review with line-level comments'
+        required: false
+        default: 'global'
+        type: string
       action-ref:
         description: 'Git ref of hivemq-pi-review-action to check out for prompts'
         required: false
@@ -468,8 +473,16 @@ jobs:
             printf '%s\n' "$PI_FINAL_MESSAGE"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Post inline review
+        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style == 'inline' }}
+        uses: ./.pi-review-action/post-inline-review
+        with:
+          judge-output: ${{ steps.run_judge.outputs.final-message }}
+          pr-number: ${{ inputs.pr-number }}
+          github-token: ${{ github.token }}
+
       - name: Upsert judge comment
-        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment }}
+        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style != 'inline' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           PI_FINAL_MESSAGE: ${{ steps.run_judge.outputs.final-message }}
