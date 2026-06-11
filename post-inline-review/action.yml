@@ -29,14 +29,16 @@ runs:
           // --- Parse judge HTML output ---
 
           const comments = [];
-          const issueRegex = /<li>\s*<strong>\[(\w+)\]<\/strong>\s*<code>([^<]+)<\/code>\s*-\s*([\s\S]*?)<\/li>/g;
+          const issueRegex = /<li>\s*<strong>\[?(\w+)\]?<\/strong>\s*<code>([^<]+)<\/code>\s*-\s*([\s\S]*?)<\/li>/g;
           let match;
           while ((match = issueRegex.exec(judgeOutput)) !== null) {
             const severity = match[1];
             const fileRef = match[2];
             const rest = match[3];
 
-            const refMatch = fileRef.match(/^(.+?):(\d+)(?:-(\d+))?$/);
+            // Handle compound refs like "file:34,39-40" — take the first
+            // file:line pair and ignore the rest.
+            const refMatch = fileRef.match(/^(.+?):(\d+)(?:-(\d+))?/);
             if (!refMatch) continue;
 
             const path = refMatch[1];
