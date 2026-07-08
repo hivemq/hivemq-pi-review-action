@@ -18,6 +18,7 @@ runs:
       env:
         PI_FINAL_MESSAGE: ${{ inputs.judge-output }}
         PR_NUMBER: ${{ inputs.pr-number }}
+        ACTION_PATH: ${{ github.action_path }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -113,23 +114,12 @@ runs:
             owner, repo, pull_number, per_page: 300,
           });
 
-          const diffLines = new Set();
-          for (const file of files) {
-            if (!file.patch) continue;
-            let lineNum = 0;
-            for (const patchLine of file.patch.split('\n')) {
-              const hunkMatch = patchLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)/);
-              if (hunkMatch) {
-                lineNum = parseInt(hunkMatch[1], 10);
-                continue;
-              }
-              if (patchLine.startsWith('-')) continue;
-              if (patchLine.startsWith('+') || patchLine.startsWith(' ')) {
-                diffLines.add(`${file.filename}:${lineNum}`);
-                lineNum++;
-              }
-            }
-          }
+          // Hunk-aware: a comment is only "on-diff" if its whole [start_line, line]
+          // range sits inside a single diff hunk — GitHub's review API rejects
+          // ranges that span two hunks even if both endpoints individually
+          // appear somewhere in the file's diff. See diff-lines.js.
+          const { partitionComments } = require(`${process.env.ACTION_PATH}/diff-lines.js`);
+          const { onDiff: onDiffComments, offDiff } = partitionComments(comments, files);
 
           const formatBody = (c) => {
             let body = `**[${c.severity}]** ${c.description}`;
@@ -138,21 +128,13 @@ runs:
             return body;
           };
 
-          const onDiff = [];
-          const offDiff = [];
-          for (const c of comments) {
-            const key = `${c.path}:${c.line}`;
-            const startKey = c.start_line ? `${c.path}:${c.start_line}` : null;
-            if (diffLines.has(key) || (startKey && diffLines.has(startKey))) {
-              const comment = { path: c.path, line: c.line, body: formatBody(c) };
-              if (c.start_line && c.start_line !== c.line) {
-                comment.start_line = c.start_line;
-              }
-              onDiff.push(comment);
-            } else {
-              offDiff.push(c);
+          const onDiff = onDiffComments.map((c) => {
+            const comment = { path: c.path, line: c.line, body: formatBody(c) };
+            if (c.start_line && c.start_line !== c.line) {
+              comment.start_line = c.start_line;
             }
-          }
+            return comment;
+          });
 
           // --- Assemble review body ---
 
@@ -180,12 +162,20 @@ runs:
 
           // --- Submit review ---
 
-          await github.rest.pulls.createReview({
-            owner, repo, pull_number,
-            event: 'COMMENT',
-            body: reviewBody,
-            comments: onDiff,
-          });
+          // Belt-and-suspenders: the hunk-aware partitioning above should already
+          // keep every onDiff comment resolvable, but don't let an unexpected
+          // GitHub API error (rate limit, an edge case we didn't anticipate, etc.)
+          // take down the whole job and lose the off-diff comments below with it.
+          try {
+            await github.rest.pulls.createReview({
+              owner, repo, pull_number,
+              event: 'COMMENT',
+              body: reviewBody,
+              comments: onDiff,
+            });
+          } catch (e) {
+            core.warning(`Could not create review with ${onDiff.length} inline comment(s): ${e.message}`);
+          }
 
           // --- Post off-diff findings as file-level comments ---
 
