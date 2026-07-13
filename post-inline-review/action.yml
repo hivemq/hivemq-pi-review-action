@@ -118,8 +118,21 @@ runs:
           // range sits inside a single diff hunk — GitHub's review API rejects
           // ranges that span two hunks even if both endpoints individually
           // appear somewhere in the file's diff. See diff-lines.js.
-          const { partitionComments } = require(`${process.env.ACTION_PATH}/diff-lines.js`);
-          const { onDiff: onDiffComments, offDiff } = partitionComments(comments, files);
+          const { partitionComments, filterToChangedFiles } = require(`${process.env.ACTION_PATH}/diff-lines.js`);
+
+          // Drop findings on files outside the net PR delta before anything is
+          // posted or counted. The reviewer's full-history checkout lets it
+          // report on stale/intermediate blobs. See PLT-1355.
+          const { kept, dropped } = filterToChangedFiles(comments, files);
+          for (const d of dropped) {
+            core.warning(`Dropping finding outside PR delta: ${d.path}:${d.line} [${d.severity}]`);
+          }
+          if (kept.length === 0 && questions.length === 0) {
+            core.info('No findings within the PR delta and no questions to post.');
+            return;
+          }
+
+          const { onDiff: onDiffComments, offDiff } = partitionComments(kept, files);
 
           const formatBody = (c) => {
             let body = `**[${c.severity}]** ${c.description}`;
@@ -139,9 +152,9 @@ runs:
           // --- Assemble review body ---
 
           let reviewBody = '<!-- pi-judge -->\n';
-          if (comments.length > 0) {
+          if (kept.length > 0) {
             const counts = {};
-            for (const c of comments) {
+            for (const c of kept) {
               counts[c.severity] = (counts[c.severity] || 0) + 1;
             }
             const severityEmoji = { critical: '🔥', high: '⚠️', medium: '👀', low: '📝' };
@@ -149,7 +162,7 @@ runs:
             const parts = severityOrder
               .filter(s => counts[s])
               .map(s => `${severityEmoji[s]} **${counts[s]}** ${s}`);
-            reviewBody += `${parts.join(' · ')}\n\n${comments.length} findings. See inline review comments for details.\n`;
+            reviewBody += `${parts.join(' · ')}\n\n${kept.length} findings. See inline review comments for details.\n`;
           } else {
             reviewBody += 'No actionable findings.\n';
           }
