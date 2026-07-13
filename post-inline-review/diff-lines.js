@@ -64,4 +64,22 @@ function partitionComments(comments, files) {
   return { onDiff, offDiff };
 }
 
-module.exports = { buildFileHunks, isRangeResolvable, partitionComments };
+// Drops findings whose file is not in the PR's changed-file set. The reviewer
+// runs in a full-history checkout (fetch-depth: 0), so it can wander into
+// intermediate commits and report on files that aren't in the net PR delta —
+// e.g. a file added then deleted within the branch, or an earlier version of a
+// file that was fixed in a later commit. Those findings are stale and must
+// never post. Match against the exact repo-relative paths from listFiles;
+// normalize a leading "./" the reviewer sometimes emits. See PLT-1355.
+function filterToChangedFiles(comments, files) {
+  const changed = new Set(files.map((f) => f.filename));
+  const kept = [];
+  const dropped = [];
+  for (const c of comments) {
+    const path = c.path.replace(/^\.\//, '');
+    (changed.has(path) ? kept : dropped).push(c);
+  }
+  return { kept, dropped };
+}
+
+module.exports = { buildFileHunks, isRangeResolvable, partitionComments, filterToChangedFiles };

@@ -22,6 +22,7 @@ Read these environment variables for context:
    - Read all files listed in the review plan (new, modified, comparisons, dependencies).
    - When line ranges are specified (e.g., `file:100-150`), read only those ranges.
    - Do not read listed files one at a time.
+   - Read each file at its head state; do not read git history or individual commits.
    - If `REVIEW_PLAN_FILE` is missing, continue using the PR diff directly.
 
 3. Review only the PR delta, using context files from the review plan:
