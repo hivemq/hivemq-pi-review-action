@@ -332,14 +332,23 @@ jobs:
             cat "$final_with_plan_file"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Namespace review output by label
+        if: always()
+        run: |
+          # Unique per-reviewer filenames let the judge merge every reviewer's
+          # output flat into one dir without collisions (see merge-multiple in
+          # the judge job), so the layout is identical for 1 or N reviewers.
+          [ -f pi-output.md ] && cp pi-output.md "pi-output-${{ matrix.label }}.md" || true
+          [ -f pi-review-plan.txt ] && cp pi-review-plan.txt "pi-review-plan-${{ matrix.label }}.txt" || true
+
       - name: Upload Pi output
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pi-pr-review-${{ matrix.label }}-${{ inputs.pr-number }}-${{ github.run_id }}
           path: |
-            pi-output.md
-            pi-review-plan.txt
+            pi-output-${{ matrix.label }}.md
+            pi-review-plan-${{ matrix.label }}.txt
           if-no-files-found: ignore
 
   pi_judge:
@@ -396,17 +405,19 @@ jobs:
         with:
           pattern: pi-pr-review-*-${{ inputs.pr-number }}-${{ github.run_id }}
           path: reviews
+          # Flatten every matched artifact into reviews/. Per-reviewer output
+          # filenames are unique (pi-output-<label>.md), so nothing collides and
+          # the layout is the same whether one or many artifacts matched.
+          merge-multiple: true
 
       - name: Assemble judge input
         run: |
           : > judge-input.md
           shopt -s nullglob
-          for dir in reviews/pi-pr-review-*; do
-            label="$(basename "$dir" | sed "s/^pi-pr-review-//; s/-${{ inputs.pr-number }}-${{ github.run_id }}$//")"
-            if [ -f "$dir/pi-output.md" ]; then
-              printf '\n---\n\n## Review: %s\n\n' "$label" >> judge-input.md
-              cat "$dir/pi-output.md" >> judge-input.md
-            fi
+          for out in reviews/pi-output-*.md; do
+            label="$(basename "$out" .md | sed 's/^pi-output-//')"
+            printf '\n---\n\n## Review: %s\n\n' "$label" >> judge-input.md
+            cat "$out" >> judge-input.md
           done
           echo "=== Judge input: $(wc -c < judge-input.md) bytes ==="
 
