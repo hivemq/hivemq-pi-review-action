@@ -146,11 +146,11 @@ the following defaults are used:
 ```json
 {
   "review": [
-    { "model": "openai/gpt-5.5", "thinking": "medium", "label": "gpt-5.5" },
+    { "model": "openai/gpt-5.6-sol", "thinking": "medium", "label": "gpt-5.6-sol" },
     { "model": "anthropic/claude-opus-4-8", "thinking": "medium", "label": "claude-opus-4.8" },
     { "model": "deepseek/deepseek-v4-pro", "thinking": "high", "label": "deepseek-v4-pro" }
   ],
-  "judge": { "model": "openai/gpt-5.5", "thinking": "medium" }
+  "judge": { "model": "openai/gpt-5.6-sol", "thinking": "medium" }
 }
 ```
 
