@@ -151,21 +151,10 @@ runs:
 
           // --- Assemble review body ---
 
+          // The marker is required: it is a non-empty body for the COMMENT review
+          // and it is how the cleanup pass above finds prior reviews. Findings
+          // speak for themselves inline, so the body carries questions only.
           let reviewBody = '<!-- pi-judge -->\n';
-          if (kept.length > 0) {
-            const counts = {};
-            for (const c of kept) {
-              counts[c.severity] = (counts[c.severity] || 0) + 1;
-            }
-            const severityEmoji = { critical: '🔥', high: '⚠️', medium: '👀', low: '📝' };
-            const severityOrder = ['critical', 'high', 'medium', 'low'];
-            const parts = severityOrder
-              .filter(s => counts[s])
-              .map(s => `${severityEmoji[s]} **${counts[s]}** ${s}`);
-            reviewBody += `${parts.join(' · ')}\n\n${kept.length} findings. See inline review comments for details.\n`;
-          } else {
-            reviewBody += 'No actionable findings.\n';
-          }
           if (questions.length > 0) {
             reviewBody += '\n## Questions\n\n';
             for (const q of questions) {
