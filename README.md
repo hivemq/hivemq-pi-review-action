@@ -112,8 +112,7 @@ Posts findings as line-level review comments via the GitHub Pull Request Reviews
 
 - **On-diff findings** are posted as inline comments on the relevant lines in the Files Changed tab
 - **Off-diff findings** (referencing lines outside the PR diff) are posted as file-level comments
-- **Questions** from the judge are included in the review body
-- A severity summary line (e.g. `🔥 1 critical · ⚠️ 2 high · 👀 3 medium`) is shown in the review body
+- **Questions** from the judge are the only thing in the review body: there is no severity summary and no finding count. With no questions and no on-diff findings, no review is posted at all
 - On re-runs, previous bot reviews are cleaned up (inline comments deleted, body replaced with a superseded notice)
 
 To opt in, pass `comment-style: inline` in the caller workflow:
