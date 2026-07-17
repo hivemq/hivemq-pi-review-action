@@ -5,3 +5,6 @@ out/
 
 .java-version
 .DS_Store
+
+# Node (test harness only; the action ships no runtime dependencies)
+node_modules/
