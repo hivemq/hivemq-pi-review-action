@@ -1,0 +1,11 @@
+{
+  "name": "hivemq-pi-review-action",
+  "private": true,
+  "description": "Test harness for the action's JavaScript. The action itself ships no runtime dependencies.",
+  "scripts": {
+    "test": "node --test post-inline-review/*.test.js review-contract/*.test.js"
+  },
+  "devDependencies": {
+    "typebox": "1.1.38"
+  }
+}

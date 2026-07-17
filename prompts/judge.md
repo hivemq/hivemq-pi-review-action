@@ -29,46 +29,36 @@ If the input file is missing or empty, report that no reviews were available to 
 - Credit the originating model(s) for each issue.
 - Only judge issues the reviewers found.
 
-## Output format (must match exactly)
-<h2>PR Review</h2>
+## Output
 
-<h3>Summary</h3>
-[2-4 sentence overall assessment based on reviewer consensus]
+Return the review by calling the `submit_review` tool exactly once, as your final
+action. Do not write the review as prose: anything not passed to `submit_review`
+is discarded and never reaches the pull request. The tool arguments are validated
+against a schema, so a malformed call is rejected and you will be asked to retry.
 
-<h3>Issues</h3>
-Use this exact structure (one `<li>` per issue, do not combine issues):
-<ol>
-  <li>
-    <strong>[severity]</strong> <code>file_path:line_or_range</code> - [description with impact, max 3 lines]
-    <ul>
-      <li><strong>Source:</strong> [model name(s) that flagged this]</li>
-      <li><strong>Fix:</strong> [if applicable, max 3 lines]</li>
-    </ul>
-  </li>
-</ol>
+Field notes:
 
-Severities: critical (security, data loss), high (bugs, incorrect behavior), medium (perf, maintainability), low (style, minor)
+- `summary` — 2-4 sentence overall assessment based on reviewer consensus.
+- `issues` — one entry per distinct issue; do not combine issues.
+  - `severity` — one of `critical` (security, data loss), `high` (bugs, incorrect
+    behavior), `medium` (perf, maintainability), `low` (style, minor). Assign it
+    from your own code verification, not the reviewers' ratings.
+  - `file` — repository-relative path only. Never append a line number.
+  - `line` / `endLine` — integers. Use `line` alone for a single line, `line` plus
+    `endLine` for a range, and `line: null` for a whole-file finding. Do not pack
+    several locations into one issue; if a problem occurs at several lines, cite
+    the primary one, or split it into separate issues.
+  - `description` — description with impact, max 3 lines.
+  - `source` — labels of the model(s) that flagged this.
+  - `fix` — max 3 lines, or `null` when not applicable.
+- `questions` — substantive, non-redundant clarification questions, each with the
+  model(s) it came from. Pass an empty list when there are none.
+- `sequenceDiagram` — if 2+ reviewers included a sequence diagram, pick the one
+  that most accurately reflects the actual code (verify against the files you
+  read), or merge them if they cover complementary parts of the flow. Pass the
+  Mermaid body without the code fence. If fewer than 2 reviewers included a
+  diagram, pass `null`.
+- `reviewerAgreement` — 1-2 sentences on how much the reviewers agreed and where
+  they diverged.
 
-If no issues survive judging:
-<p>No actionable issues found across reviewers.</p>
-
-<h3>Questions</h3>
-Use an HTML ordered list with one `<li>` per question:
-<ol>
-<li>[question] <em>(from: [model name(s)])</em></li>
-</ol>
-If none:
-<p>None.</p>
-
-<h3>Sequence Diagram</h3>
-If 2+ reviewers included a sequence diagram, pick the one that most accurately reflects the actual code (verify against the files you read), or merge them if they cover complementary parts of the flow. If fewer than 2 reviewers included a diagram, omit this section.
-
-```mermaid
-sequenceDiagram
-    [runtime/control/data flow introduced by this PR]
-```
-
-<h3>Reviewer Agreement</h3>
-<p>[1-2 sentences on how much the reviewers agreed and where they diverged]</p>
-
-Return only the final review output.
+Pass an empty `issues` list if no issues survive judging.
