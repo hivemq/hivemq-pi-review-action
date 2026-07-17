@@ -12,6 +12,19 @@ AI-powered pull request reviews using multiple models in parallel, with a judge 
   comment, with off-diff findings attached as file-level comments
 - **Flexible triggers**: Supports `pull_request` (label), `issue_comment` (`/review`), and `workflow_dispatch`
 
+## Judge output contract
+
+The judge does not write its review as prose. It calls a `submit_review` tool,
+registered by the pi extension in `review-contract/extension.mjs` and loaded with
+`pi -e`. Pi validates the tool arguments against `review-contract/schema.js`
+before invoking it, and feeds any validation error back to the model as a tool
+error, so a malformed review costs a retry instead of being silently discarded.
+The tool writes the validated JSON to `$PI_REVIEW_OUTPUT` and ends the turn
+(`terminate: true`), which skips a follow-up model call.
+
+The PR comment and the inline comments are both rendered from that JSON by
+`review-contract/render.js`. Nothing parses the model's prose.
+
 ## Architecture
 
 Two components work together:

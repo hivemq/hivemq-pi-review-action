@@ -442,8 +442,22 @@ jobs:
         if: steps.validate_judge.outputs.skip != 'true'
         run: |
           set -o pipefail
+          # The judge returns its review by calling the submit_review tool, which
+          # writes PI_REVIEW_OUTPUT. stdout is only kept for the job log: the tool
+          # terminates the turn, so there is no final assistant message to parse.
           pi -p --model ${{ needs.setup.outputs.judge-model }} ${{ needs.setup.outputs.judge-thinking && format('--thinking {0}', needs.setup.outputs.judge-thinking) || '' }} --no-session \
+            -e .pi-review-action/review-contract/extension.mjs \
             "$(cat "${{ steps.judge_prompt.outputs.path }}")" \
+            | tee pi-judge-stdout.txt
+
+          # Fail closed. Previously a judge that drifted from the prescribed format
+          # produced zero findings and a green job.
+          if [ ! -s pi-judge-review.json ]; then
+            echo "::error::The judge did not call submit_review; no review was produced."
+            exit 1
+          fi
+
+          node .pi-review-action/review-contract/render.js pi-judge-review.json \
             | tee pi-judge-output.md
 
           delim="PIEOF_$(dd if=/dev/urandom bs=15 count=1 status=none | base64)"
@@ -453,6 +467,7 @@ jobs:
             echo "$delim"
           } >> "$GITHUB_OUTPUT"
         env:
+          PI_REVIEW_OUTPUT: pi-judge-review.json
           OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
@@ -477,7 +492,7 @@ jobs:
         if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style == 'inline' }}
         uses: ./.pi-review-action/post-inline-review
         with:
-          judge-output: ${{ steps.run_judge.outputs.final-message }}
+          review-json: pi-judge-review.json
           pr-number: ${{ inputs.pr-number }}
           github-token: ${{ github.token }}
 
@@ -538,6 +553,8 @@ jobs:
         with:
           name: pi-judge-${{ inputs.pr-number }}-${{ github.run_id }}
           path: |
+            pi-judge-review.json
             pi-judge-output.md
+            pi-judge-stdout.txt
             judge-input.md
           if-no-files-found: ignore
