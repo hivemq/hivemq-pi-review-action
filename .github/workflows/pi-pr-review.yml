@@ -155,7 +155,7 @@ jobs:
             core.setOutput('head_ref', pr.head.ref);
             core.setOutput('head_sha', pr.head.sha);
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/pull/${{ steps.pr_context.outputs.number }}/merge
           fetch-depth: 0
@@ -167,7 +167,7 @@ jobs:
             +refs/pull/${{ steps.pr_context.outputs.number }}/head
 
       - name: Checkout action repo
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: hivemq/hivemq-pi-review-action
           ref: ${{ inputs.action-ref }}
@@ -352,13 +352,13 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/pull/${{ inputs.pr-number }}/merge
           fetch-depth: 1
 
       - name: Checkout action repo
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: hivemq/hivemq-pi-review-action
           ref: ${{ inputs.action-ref }}
