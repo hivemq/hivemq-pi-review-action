@@ -58,6 +58,10 @@ jobs:
   setup:
     name: Setup
     runs-on: "${{ inputs.runner-label }}"
+    # Only parses model config; never touches the PR. Restrict to read so it does
+    # not inherit the caller's issues/pull-requests write ceiling.
+    permissions:
+      contents: read
     outputs:
       review-matrix: ${{ steps.parse.outputs.review-matrix }}
       judge-model: ${{ steps.parse.outputs.judge-model }}
