@@ -23,12 +23,55 @@ require:
 
 # Any changed path matching a glob here forces a human review and stops the
 # auto-approve path. Globs: `*` = one segment, `**` = any depth.
+#
+# Tuned from a survey of the team's platform-managed infra repos. Deliberately
+# NOT listed: dependency manifests/lockfiles (Renovate bumps are the prime
+# auto-merge case) and swamp extensions/models (app logic the AI should review).
 always_human_paths:
+  # infra-as-code
   - "**/*.tf"
+  - "**/*.tfvars"
+  - "**/*.tfstate"
+  - "**/.terraform.lock.hcl"
   - "terraform/**"
+  # config management / provisioning
+  - "**/ansible/**"
+  - "**/roles/**"
+  - "**/playbooks/**"
+  # kubernetes / gitops / deploy
+  - "**/charts/**"
+  - "**/manifests/**"
+  - "**/argocd/**"
+  - "**/kustomization.yaml"
+  - "**/values*.yaml"
+  # containers / supply chain
+  - "**/Dockerfile*"
+  - "**/Containerfile"
+  - "**/docker-compose*.yml"
+  # CI / automation
   - ".github/**"
-  - "vaults/**"
+  - "**/Jenkinsfile*"
+  - "**/.gitlab-ci.yml"
+  - "**/.circleci/**"
+  - "**/.pre-commit-config.yaml"
+  # secrets / credentials
+  - "**/vaults/**"
+  - "**/*.age"
+  - "**/*.gpg"
+  - "**/*.pem"
+  - "**/*.key"
+  - "**/*.p12"
+  - "**/*.pfx"
+  - "**/*.jks"
+  - "**/*.keystore"
+  - "**/*.enc"
+  - "**/*.sops.yaml"
+  - "**/.env"
+  - "**/.envrc"
+  # access / policy
   - "**/CODEOWNERS"
+  - "**/*.rego"
+  - "**/policies/**"
 
 # Heuristic scan of the PR title, body, and diff for prompt-injection attempts.
 # A hit forces a human review.
