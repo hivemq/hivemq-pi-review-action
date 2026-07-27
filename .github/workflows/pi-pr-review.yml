@@ -15,7 +15,12 @@ on:
       runner-label:
         description: 'Runner label to use'
         required: false
-        default: 'pi'
+        default: 'github-actions-runner'
+        type: string
+      comment-style:
+        description: 'How to post review findings: "global" for a single PR comment, "inline" for a PR review with line-level comments'
+        required: false
+        default: 'global'
         type: string
       action-ref:
         description: 'Git ref of hivemq-pi-review-action to check out for prompts'
@@ -53,6 +58,10 @@ jobs:
   setup:
     name: Setup
     runs-on: "${{ inputs.runner-label }}"
+    # Only parses model config; never touches the PR. Restrict to read so it does
+    # not inherit the caller's issues/pull-requests write ceiling.
+    permissions:
+      contents: read
     outputs:
       review-matrix: ${{ steps.parse.outputs.review-matrix }}
       judge-model: ${{ steps.parse.outputs.judge-model }}
@@ -67,11 +76,11 @@ jobs:
           script: |
             const defaultConfig = {
               review: [
-                { model: 'openai/gpt-5.5', thinking: 'medium', label: 'gpt-5.5' },
-                { model: 'anthropic/claude-opus-4-8', thinking: 'medium', label: 'claude-opus-4.8' },
+                { model: 'openai/gpt-5.6-sol', thinking: 'medium', label: 'gpt-5.6-sol' },
+                { model: 'anthropic/claude-opus-5', thinking: 'medium', label: 'claude-opus-5' },
                 { model: 'deepseek/deepseek-v4-pro', thinking: 'high', label: 'deepseek-v4-pro' },
               ],
-              judge: { model: 'openai/gpt-5.5', thinking: 'medium' },
+              judge: { model: 'openai/gpt-5.6-sol', thinking: 'medium' },
             };
 
             const raw = process.env.PI_REVIEW_MODELS;
@@ -150,7 +159,7 @@ jobs:
             core.setOutput('head_ref', pr.head.ref);
             core.setOutput('head_sha', pr.head.sha);
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/pull/${{ steps.pr_context.outputs.number }}/merge
           fetch-depth: 0
@@ -162,7 +171,7 @@ jobs:
             +refs/pull/${{ steps.pr_context.outputs.number }}/head
 
       - name: Checkout action repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: hivemq/hivemq-pi-review-action
           ref: ${{ inputs.action-ref }}
@@ -179,16 +188,18 @@ jobs:
 
       - name: Install Node.js
         if: steps.deps.outputs.need_node == 'true'
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
 
       - name: Install Pi coding agent
         if: steps.deps.outputs.need_pi == 'true'
-        run: sudo npm install -g @mariozechner/pi-coding-agent
+        run: |
+          npm install @earendil-works/pi-coding-agent
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@2ebcf16054461267868620b1414507f3ccc765c1 # master
+        uses: Homebrew/actions/setup-homebrew@f78b97900ce6c3c9c4e99de00a999e5541eeaabb # master
 
       - name: Install yq
         run: brew install yq
@@ -347,13 +358,13 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/pull/${{ inputs.pr-number }}/merge
           fetch-depth: 1
 
       - name: Checkout action repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: hivemq/hivemq-pi-review-action
           ref: ${{ inputs.action-ref }}
@@ -369,16 +380,18 @@ jobs:
 
       - name: Install Node.js
         if: steps.deps.outputs.need_node == 'true'
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
 
       - name: Install Pi coding agent
         if: steps.deps.outputs.need_pi == 'true'
-        run: sudo npm install -g @mariozechner/pi-coding-agent
+        run: |
+          npm install @earendil-works/pi-coding-agent
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@2ebcf16054461267868620b1414507f3ccc765c1 # master
+        uses: Homebrew/actions/setup-homebrew@f78b97900ce6c3c9c4e99de00a999e5541eeaabb # master
 
       - name: Install yq
         run: brew install yq
@@ -468,8 +481,16 @@ jobs:
             printf '%s\n' "$PI_FINAL_MESSAGE"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Post inline review
+        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style == 'inline' }}
+        uses: ./.pi-review-action/post-inline-review
+        with:
+          judge-output: ${{ steps.run_judge.outputs.final-message }}
+          pr-number: ${{ inputs.pr-number }}
+          github-token: ${{ github.token }}
+
       - name: Upsert judge comment
-        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment }}
+        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style != 'inline' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           PI_FINAL_MESSAGE: ${{ steps.run_judge.outputs.final-message }}

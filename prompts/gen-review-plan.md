@@ -12,7 +12,7 @@ Read these environment variables for context:
 Produce a concise, actionable plan that helps a reviewer inspect the PR.
 
 ## Required workflow
-1. Inspect only this PR delta (`$PR_BASE_SHA...$PR_HEAD_SHA`).
+1. Inspect only this PR delta (`$PR_BASE_SHA...$PR_HEAD_SHA`). Judge files at head state; do not read git history or individual commits.
 2. Identify changed files and classify each one (new/modified/renamed/deleted).
 3. Read repository guidance docs if present (`AGENTS.md`).
 4. For each changed file, find files it imports or calls, and existing files that solve a similar problem.

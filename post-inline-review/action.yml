@@ -1,0 +1,214 @@
+name: 'Pi PR Review - Post Inline Review'
+description: 'Parses judge output and posts findings as inline PR review comments'
+inputs:
+  judge-output:
+    description: 'The judge Markdown/HTML output to parse'
+    required: true
+  pr-number:
+    description: 'Pull request number'
+    required: true
+  github-token:
+    description: 'GitHub token with pull-requests:write permission'
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: post
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+      env:
+        PI_FINAL_MESSAGE: ${{ inputs.judge-output }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        ACTION_PATH: ${{ github.action_path }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const pull_number = Number(process.env.PR_NUMBER);
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const judgeOutput = process.env.PI_FINAL_MESSAGE;
+
+          // --- Parse judge HTML output ---
+
+          const comments = [];
+          const issueRegex = /<li>\s*<strong>\[?(\w+)\]?<\/strong>\s*<code>([^<]+)<\/code>\s*[-—–]\s*([\s\S]*?)<\/ul>\s*<\/li>/g;
+          let match;
+          while ((match = issueRegex.exec(judgeOutput)) !== null) {
+            const severity = match[1];
+            const fileRef = match[2];
+            const rest = match[3];
+
+            // Handle compound refs like "file:34,39-40" — take the first
+            // file:line pair and ignore the rest.
+            const refMatch = fileRef.match(/^(.+?):(\d+)(?:-(\d+))?/);
+            if (!refMatch) continue;
+
+            const path = refMatch[1];
+            const line = parseInt(refMatch[2], 10);
+            const endLine = refMatch[3] ? parseInt(refMatch[3], 10) : null;
+
+            const description = rest.replace(/<ul>[\s\S]*/, '').trim();
+
+            const sourceMatch = rest.match(/<strong>Source:<\/strong>\s*(.*?)<\/li>/);
+            const fixMatch = rest.match(/<strong>Fix:<\/strong>\s*(.*?)<\/li>/);
+
+            comments.push({
+              path,
+              line: endLine || line,
+              start_line: endLine ? line : null,
+              severity,
+              description,
+              source: sourceMatch ? sourceMatch[1].trim() : '',
+              fix: fixMatch ? fixMatch[1].trim() : '',
+            });
+          }
+
+          const questions = [];
+          const questionsSection = judgeOutput.match(/<h3>Questions<\/h3>([\s\S]*?)(?=<h3>|$)/);
+          if (questionsSection) {
+            const qRegex = /<li>([\s\S]*?)<\/li>/g;
+            let qMatch;
+            while ((qMatch = qRegex.exec(questionsSection[1])) !== null) {
+              const text = qMatch[1].trim();
+              if (text && !text.includes('None.')) {
+                questions.push(text);
+              }
+            }
+          }
+
+          if (comments.length === 0 && questions.length === 0) {
+            core.info('No inline comments or questions to post.');
+            return;
+          }
+
+          // --- Clean up previous bot reviews ---
+
+          const marker = '<!-- pi-judge -->';
+          const { data: reviews } = await github.rest.pulls.listReviews({
+            owner, repo, pull_number,
+          });
+          for (const review of reviews) {
+            if (review.user?.type !== 'Bot' || !review.body?.includes(marker)) continue;
+            try {
+              // Delete inline comments from the old review
+              const { data: reviewComments } = await github.rest.pulls.listCommentsForReview({
+                owner, repo, pull_number, review_id: review.id, per_page: 100,
+              });
+              for (const rc of reviewComments) {
+                await github.rest.pulls.deleteReviewComment({
+                  owner, repo, comment_id: rc.id,
+                });
+              }
+              // Replace the review body with a superseded notice
+              await github.rest.pulls.updateReview({
+                owner, repo, pull_number, review_id: review.id,
+                body: `${marker}\n*Superseded by newer review.*`,
+              });
+            } catch (e) {
+              core.warning(`Could not clean up review ${review.id}: ${e.message}`);
+            }
+          }
+
+          // --- Partition comments into on-diff and off-diff ---
+
+          const { data: files } = await github.rest.pulls.listFiles({
+            owner, repo, pull_number, per_page: 300,
+          });
+
+          // Hunk-aware: a comment is only "on-diff" if its whole [start_line, line]
+          // range sits inside a single diff hunk — GitHub's review API rejects
+          // ranges that span two hunks even if both endpoints individually
+          // appear somewhere in the file's diff. See diff-lines.js.
+          const { partitionComments, filterToChangedFiles } = require(`${process.env.ACTION_PATH}/diff-lines.js`);
+
+          // Drop findings on files outside the net PR delta before anything is
+          // posted or counted. The reviewer's full-history checkout lets it
+          // report on stale/intermediate blobs. See PLT-1355.
+          const { kept, dropped } = filterToChangedFiles(comments, files);
+          for (const d of dropped) {
+            core.warning(`Dropping finding outside PR delta: ${d.path}:${d.line} [${d.severity}]`);
+          }
+          if (kept.length === 0 && questions.length === 0) {
+            core.info('No findings within the PR delta and no questions to post.');
+            return;
+          }
+
+          const { onDiff: onDiffComments, offDiff } = partitionComments(kept, files);
+
+          const formatBody = (c) => {
+            let body = `**[${c.severity}]** ${c.description}`;
+            if (c.source) body += `\n\n**Source:** ${c.source}`;
+            if (c.fix) body += `\n\n**Fix:** ${c.fix}`;
+            return body;
+          };
+
+          const onDiff = onDiffComments.map((c) => {
+            const comment = { path: c.path, line: c.line, body: formatBody(c) };
+            if (c.start_line && c.start_line !== c.line) {
+              comment.start_line = c.start_line;
+            }
+            return comment;
+          });
+
+          // --- Assemble review body ---
+
+          let reviewBody = '<!-- pi-judge -->\n';
+          if (kept.length > 0) {
+            const counts = {};
+            for (const c of kept) {
+              counts[c.severity] = (counts[c.severity] || 0) + 1;
+            }
+            const severityEmoji = { critical: '🔥', high: '⚠️', medium: '👀', low: '📝' };
+            const severityOrder = ['critical', 'high', 'medium', 'low'];
+            const parts = severityOrder
+              .filter(s => counts[s])
+              .map(s => `${severityEmoji[s]} **${counts[s]}** ${s}`);
+            reviewBody += `${parts.join(' · ')}\n\n${kept.length} findings. See inline review comments for details.\n`;
+          } else {
+            reviewBody += 'No actionable findings.\n';
+          }
+          if (questions.length > 0) {
+            reviewBody += '\n## Questions\n\n';
+            for (const q of questions) {
+              reviewBody += `- ${q}\n`;
+            }
+          }
+
+          // --- Submit review ---
+
+          // Belt-and-suspenders: the hunk-aware partitioning above should already
+          // keep every onDiff comment resolvable, but don't let an unexpected
+          // GitHub API error (rate limit, an edge case we didn't anticipate, etc.)
+          // take down the whole job and lose the off-diff comments below with it.
+          try {
+            await github.rest.pulls.createReview({
+              owner, repo, pull_number,
+              event: 'COMMENT',
+              body: reviewBody,
+              comments: onDiff,
+            });
+          } catch (e) {
+            core.warning(`Could not create review with ${onDiff.length} inline comment(s): ${e.message}`);
+          }
+
+          // --- Post off-diff findings as file-level comments ---
+
+          const { data: pr } = await github.rest.pulls.get({
+            owner, repo, pull_number,
+          });
+          for (const c of offDiff) {
+            const ref = c.start_line ? `${c.start_line}-${c.line}` : `${c.line}`;
+            const body = `**[${c.severity}]** \`${c.path}:${ref}\` — ${c.description}`
+              + (c.source ? `\n\n**Source:** ${c.source}` : '')
+              + (c.fix ? `\n\n**Fix:** ${c.fix}` : '');
+            try {
+              await github.rest.pulls.createReviewComment({
+                owner, repo, pull_number,
+                commit_id: pr.head.sha,
+                path: c.path,
+                subject_type: 'file',
+                body,
+              });
+            } catch (e) {
+              core.warning(`Could not post file-level comment on ${c.path}: ${e.message}`);
+            }
+          }

@@ -4,10 +4,12 @@ AI-powered pull request reviews using multiple models in parallel, with a judge 
 
 ## Features
 
-- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.5, Claude Opus 4.8, DeepSeek v4 Pro)
+- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.5, Claude Opus 5, DeepSeek v4 Pro)
 - **Judge synthesis**: A judge model verifies issues against actual code, deduplicates, and produces a final consensus
   review
 - **PR comment upsert**: Posts/updates a single judge comment on the PR (with `<!-- pi-judge -->` marker)
+- **Inline review comments**: Optionally posts findings as line-level PR review comments instead of a single global
+  comment, with off-diff findings attached as file-level comments
 - **Flexible triggers**: Supports `pull_request` (label), `issue_comment` (`/review`), and `workflow_dispatch`
 
 ## Architecture
@@ -91,12 +93,43 @@ jobs:
 
 ## Reusable Workflow Inputs
 
-| Input          | Type      | Required | Default | Description                                            |
-|----------------|-----------|----------|---------|--------------------------------------------------------|
-| `pr-number`    | `number`  | yes      | n/a     | PR number to review                                    |
-| `post-comment` | `boolean` | no       | `true`  | Post/update PR comment with judge results              |
-| `runner-label` | `string`  | no       | `pi`    | Runner label for review/judge jobs                     |
-| `action-ref`   | `string`  | no       | `v1`    | Git ref of this action to check out for prompt files   |
+| Input           | Type      | Required | Default  | Description                                            |
+|-----------------|-----------|----------|----------|--------------------------------------------------------|
+| `pr-number`     | `number`  | yes      | n/a      | PR number to review                                    |
+| `post-comment`  | `boolean` | no       | `true`   | Post/update PR comment with judge results              |
+| `comment-style` | `string`  | no       | `global` | `global` for a single PR comment, `inline` for line-level review comments |
+| `runner-label`  | `string`  | no       | `pi`     | Runner label for review/judge jobs                     |
+| `action-ref`    | `string`  | no       | `v1`     | Git ref of this action to check out for prompt files   |
+
+## Comment Styles
+
+The `comment-style` input controls how the judge's findings are posted to the PR.
+
+### `global` (default)
+
+Posts a single top-level PR comment containing the full judge review. The comment is upserted on re-runs (identified by
+the `<!-- pi-judge -->` marker). This is the original behavior.
+
+### `inline`
+
+Posts findings as line-level review comments via the GitHub Pull Request Reviews API:
+
+- **On-diff findings** are posted as inline comments on the relevant lines in the Files Changed tab
+- **Off-diff findings** (referencing lines outside the PR diff) are posted as file-level comments
+- **Questions** from the judge are included in the review body
+- A severity summary line (e.g. `🔥 1 critical · ⚠️ 2 high · 👀 3 medium`) is shown in the review body
+- On re-runs, previous bot reviews are cleaned up (inline comments deleted, body replaced with a superseded notice)
+
+To opt in, pass `comment-style: inline` in the caller workflow:
+
+```yaml
+  review:
+    uses: hivemq/hivemq-pi-review-action/.github/workflows/pi-pr-review.yml@v1
+    with:
+      pr-number: ...
+      post-comment: true
+      comment-style: inline
+```
 
 ## Required Secrets
 
@@ -104,7 +137,7 @@ jobs:
 |-------------------------|-----------------------------------------------|
 | `PI_OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.5 and judge)    |
 | `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (used by DeepSeek v4 Pro)    |
-| `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 4.8)   |
+| `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 5)     |
 | `PI_OPENROUTER_API_KEY` | OpenRouter API key (optional; for OpenRouter models) |
 
 The legacy un-prefixed names (e.g. `ANTHROPIC_API_KEY`) are still accepted as a fallback during migration.
@@ -117,11 +150,11 @@ the following defaults are used:
 ```json
 {
   "review": [
-    { "model": "openai/gpt-5.5", "thinking": "medium", "label": "gpt-5.5" },
-    { "model": "anthropic/claude-opus-4-8", "thinking": "medium", "label": "claude-opus-4.8" },
+    { "model": "openai/gpt-5.6-sol", "thinking": "medium", "label": "gpt-5.6-sol" },
+    { "model": "anthropic/claude-opus-5", "thinking": "medium", "label": "claude-opus-5" },
     { "model": "deepseek/deepseek-v4-pro", "thinking": "high", "label": "deepseek-v4-pro" }
   ],
-  "judge": { "model": "openai/gpt-5.5", "thinking": "medium" }
+  "judge": { "model": "openai/gpt-5.6-sol", "thinking": "medium" }
 }
 ```
 
