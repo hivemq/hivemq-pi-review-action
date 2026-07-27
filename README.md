@@ -4,7 +4,7 @@ AI-powered pull request reviews using multiple models in parallel, with a judge 
 
 ## Features
 
-- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.5, Claude Opus 4.8, DeepSeek v4 Pro)
+- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.5, Claude Opus 5, DeepSeek v4 Pro)
 - **Judge synthesis**: A judge model verifies issues against actual code, deduplicates, and produces a final consensus
   review
 - **PR comment upsert**: Posts/updates a single judge comment on the PR (with `<!-- pi-judge -->` marker)
@@ -133,7 +133,7 @@ To opt in, pass `comment-style: inline` in the caller workflow:
 |-------------------------|-----------------------------------------------|
 | `PI_OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.5 and judge)    |
 | `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (used by DeepSeek v4 Pro)    |
-| `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 4.8)   |
+| `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 5)     |
 | `PI_OPENROUTER_API_KEY` | OpenRouter API key (optional; for OpenRouter models) |
 
 The legacy un-prefixed names (e.g. `ANTHROPIC_API_KEY`) are still accepted as a fallback during migration.
@@ -147,7 +147,7 @@ the following defaults are used:
 {
   "review": [
     { "model": "openai/gpt-5.6-sol", "thinking": "medium", "label": "gpt-5.6-sol" },
-    { "model": "anthropic/claude-opus-4-8", "thinking": "medium", "label": "claude-opus-4.8" },
+    { "model": "anthropic/claude-opus-5", "thinking": "medium", "label": "claude-opus-5" },
     { "model": "deepseek/deepseek-v4-pro", "thinking": "high", "label": "deepseek-v4-pro" }
   ],
   "judge": { "model": "openai/gpt-5.6-sol", "thinking": "medium" }

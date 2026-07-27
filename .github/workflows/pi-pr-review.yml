@@ -15,7 +15,7 @@ on:
       runner-label:
         description: 'Runner label to use'
         required: false
-        default: 'pi'
+        default: 'github-actions-runner'
         type: string
       comment-style:
         description: 'How to post review findings: "global" for a single PR comment, "inline" for a PR review with line-level comments'
@@ -58,6 +58,10 @@ jobs:
   setup:
     name: Setup
     runs-on: "${{ inputs.runner-label }}"
+    # Only parses model config; never touches the PR. Restrict to read so it does
+    # not inherit the caller's issues/pull-requests write ceiling.
+    permissions:
+      contents: read
     outputs:
       review-matrix: ${{ steps.parse.outputs.review-matrix }}
       judge-model: ${{ steps.parse.outputs.judge-model }}
@@ -73,7 +77,7 @@ jobs:
             const defaultConfig = {
               review: [
                 { model: 'openai/gpt-5.6-sol', thinking: 'medium', label: 'gpt-5.6-sol' },
-                { model: 'anthropic/claude-opus-4-8', thinking: 'medium', label: 'claude-opus-4.8' },
+                { model: 'anthropic/claude-opus-5', thinking: 'medium', label: 'claude-opus-5' },
                 { model: 'deepseek/deepseek-v4-pro', thinking: 'high', label: 'deepseek-v4-pro' },
               ],
               judge: { model: 'openai/gpt-5.6-sol', thinking: 'medium' },
@@ -155,7 +159,7 @@ jobs:
             core.setOutput('head_ref', pr.head.ref);
             core.setOutput('head_sha', pr.head.sha);
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/pull/${{ steps.pr_context.outputs.number }}/merge
           fetch-depth: 0
@@ -167,7 +171,7 @@ jobs:
             +refs/pull/${{ steps.pr_context.outputs.number }}/head
 
       - name: Checkout action repo
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: hivemq/hivemq-pi-review-action
           ref: ${{ inputs.action-ref }}
@@ -195,7 +199,7 @@ jobs:
           echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@100978dc923ea73ee9ed454d1d5c4fcf3ee14a9e # master
+        uses: Homebrew/actions/setup-homebrew@f78b97900ce6c3c9c4e99de00a999e5541eeaabb # master
 
       - name: Install yq
         run: brew install yq
@@ -354,13 +358,13 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: refs/pull/${{ inputs.pr-number }}/merge
           fetch-depth: 1
 
       - name: Checkout action repo
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: hivemq/hivemq-pi-review-action
           ref: ${{ inputs.action-ref }}
@@ -387,7 +391,7 @@ jobs:
           echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@100978dc923ea73ee9ed454d1d5c4fcf3ee14a9e # master
+        uses: Homebrew/actions/setup-homebrew@f78b97900ce6c3c9c4e99de00a999e5541eeaabb # master
 
       - name: Install yq
         run: brew install yq
