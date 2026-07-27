@@ -199,7 +199,7 @@ jobs:
           echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@f78b97900ce6c3c9c4e99de00a999e5541eeaabb # master
+        uses: Homebrew/actions/setup-homebrew@15d0b666bf0311bfe676c178e0824dc1b52074a7 # master
 
       - name: Install yq
         run: brew install yq
@@ -391,7 +391,7 @@ jobs:
           echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@f78b97900ce6c3c9c4e99de00a999e5541eeaabb # master
+        uses: Homebrew/actions/setup-homebrew@15d0b666bf0311bfe676c178e0824dc1b52074a7 # master
 
       - name: Install yq
         run: brew install yq
