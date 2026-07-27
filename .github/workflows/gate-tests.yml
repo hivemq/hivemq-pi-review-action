@@ -1,4 +1,4 @@
-name: Test
+name: Gate Tests
 
 on:
   pull_request:
