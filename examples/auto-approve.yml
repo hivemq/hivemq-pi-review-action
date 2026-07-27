@@ -1,0 +1,41 @@
+# Per-repo AI auto-approve policy — copy to .github/auto-approve.yml in a
+# consuming repo. Read from the PR's BASE ref, so a PR cannot weaken its own gate.
+version: 1
+
+# Master switch. With this false (or the file absent) the gate is a no-op.
+enabled: false
+
+# shadow  — evaluate and log the verdict, act on nothing (start here).
+# enforce — additionally apply `human_label` when a PR must go to a human.
+mode: shadow
+
+# Label applied to PRs the gate sends to a human (enforce mode only).
+# NOTE: deliberately NOT `manual-review` — that label re-triggers a Pi review.
+human_label: human-review-required
+
+# ALL of these must hold for a PR to be auto-approve eligible.
+require:
+  checks_pass: true
+  # Every changed file must be owned (via CODEOWNERS) by one of these teams.
+  # Accepts a bare slug or the full @org/team form.
+  owner_teams:
+    - hivemq-team-platform
+
+# Any changed path matching a glob here forces a human review and stops the
+# auto-approve path. Globs: `*` = one segment, `**` = any depth.
+always_human_paths:
+  - "**/*.tf"
+  - "terraform/**"
+  - ".github/**"
+  - "vaults/**"
+  - "**/CODEOWNERS"
+
+# Heuristic scan of the PR title, body, and diff for prompt-injection attempts.
+# A hit forces a human review.
+prompt_injection_guard:
+  enabled: true
+
+# Stage 2 (approver) consumes these once built (PLT-1520).
+approver:
+  min_confidence: high
+  require_no_open_issues: true
