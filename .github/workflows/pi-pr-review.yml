@@ -194,7 +194,9 @@ jobs:
 
       - name: Install Pi coding agent
         if: steps.deps.outputs.need_pi == 'true'
-        run: sudo npm install -g @earendil-works/pi-coding-agent
+        run: |
+          npm install @earendil-works/pi-coding-agent
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
         uses: Homebrew/actions/setup-homebrew@f78b97900ce6c3c9c4e99de00a999e5541eeaabb # master
@@ -384,7 +386,9 @@ jobs:
 
       - name: Install Pi coding agent
         if: steps.deps.outputs.need_pi == 'true'
-        run: sudo npm install -g @earendil-works/pi-coding-agent
+        run: |
+          npm install @earendil-works/pi-coding-agent
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
         uses: Homebrew/actions/setup-homebrew@f78b97900ce6c3c9c4e99de00a999e5541eeaabb # master
