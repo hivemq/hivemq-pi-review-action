@@ -187,13 +187,18 @@ the gate is a no-op (`gate-reason=no-policy`). The policy file and `CODEOWNERS`
 are read from the PR's **base** ref, so a PR cannot weaken the gate that judges
 it. See [`examples/auto-approve.yml`](examples/auto-approve.yml).
 
-A PR is sent to a human (`force-human=true`) if **any** of these hold:
+The gate uses an **allowlist**, not a blocklist — fail-safe by design. A path
+that is not explicitly allowed defaults to a human, so a newly-added sensitive
+directory is safe by default rather than auto-merged, and the list stays short
+instead of growing into tech debt. A PR is sent to a human (`force-human=true`)
+if **any** of these hold:
 
-- a changed path matches an `always_human_paths` glob (e.g. Terraform, `.github/**`, secrets);
+- **any** changed file does not match an `auto_approve_paths` glob (`gate-reason=not-allowlisted:<file>`), or the allowlist/changeset is empty;
 - a changed file is owned (per `CODEOWNERS`) by a team not in `require.owner_teams`;
 - the `prompt_injection_guard` heuristic matches the PR title, body, or diff.
 
-Otherwise the PR is marked `auto-approve-eligible=true`. In `mode: enforce` a
+Otherwise (every changed file is allowlisted and no other rule trips) the PR is
+marked `auto-approve-eligible=true`. In `mode: enforce` a
 `force-human` verdict also applies the `human_label` (default
 `human-review-required`); in `mode: shadow` it only logs. The gate fails safe:
 missing tooling or an unreadable policy yields *not eligible*, never a blind

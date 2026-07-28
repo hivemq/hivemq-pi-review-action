@@ -21,57 +21,20 @@ require:
   owner_teams:
     - hivemq-team-platform
 
-# Any changed path matching a glob here forces a human review and stops the
-# auto-approve path. Globs: `*` = one segment, `**` = any depth.
+# Allowlist. A PR is eligible for auto-approve ONLY if EVERY changed file
+# matches one of these globs; anything unlisted routes to a human. Fail-safe by
+# design — a newly-added sensitive dir defaults to human review until someone
+# deliberately allows it, so this list should stay short and trusted (no infra,
+# CI, secrets, or IaC here). Globs: `*` = one segment, `**` = any depth.
 #
-# Tuned from a survey of the team's platform-managed infra repos. Deliberately
-# NOT listed: dependency manifests/lockfiles (Renovate bumps are the prime
-# auto-merge case) and swamp extensions/models (app logic the AI should review).
-always_human_paths:
-  # infra-as-code
-  - "**/*.tf"
-  - "**/*.tfvars"
-  - "**/*.tfstate"
-  - "**/.terraform.lock.hcl"
-  - "terraform/**"
-  # config management / provisioning
-  - "**/ansible/**"
-  - "**/roles/**"
-  - "**/playbooks/**"
-  # kubernetes / gitops / deploy
-  - "**/charts/**"
-  - "**/manifests/**"
-  - "**/argocd/**"
-  - "**/kustomization.yaml"
-  - "**/values*.yaml"
-  # containers / supply chain
-  - "**/Dockerfile*"
-  - "**/Containerfile"
-  - "**/docker-compose*.yml"
-  # CI / automation
-  - ".github/**"
-  - "**/Jenkinsfile*"
-  - "**/.gitlab-ci.yml"
-  - "**/.circleci/**"
-  - "**/.pre-commit-config.yaml"
-  # secrets / credentials
-  - "**/vaults/**"
-  - "**/*.age"
-  - "**/*.gpg"
-  - "**/*.pem"
-  - "**/*.key"
-  - "**/*.p12"
-  - "**/*.pfx"
-  - "**/*.jks"
-  - "**/*.keystore"
-  - "**/*.enc"
-  - "**/*.sops.yaml"
-  - "**/.env"
-  - "**/.envrc"
-  # access / policy
-  - "**/CODEOWNERS"
-  - "**/*.rego"
-  - "**/policies/**"
+# Tune per repo. This default trusts application source, docs, and tests — the
+# set the AI reviewer is expected to judge — and nothing operationally risky.
+auto_approve_paths:
+  - "crates/**"          # application/library source (repo-specific)
+  - "src/**"
+  - "tests/**"
+  - "**/*.md"
+  - "docs/**"
 
 # Heuristic scan of the PR title, body, and diff for prompt-injection attempts.
 # A hit forces a human review.

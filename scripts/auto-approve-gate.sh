@@ -97,7 +97,7 @@ enabled="$(yq -r '.enabled // false' <<< "$policy")"
 mode="$(yq -r '.mode // "shadow"' <<< "$policy")"
 human_label="$(yq -r '.human_label // "human-review-required"' <<< "$policy")"
 injection_enabled="$(yq -r '.prompt_injection_guard.enabled // true' <<< "$policy")"
-mapfile -t human_paths < <(yq -r '.always_human_paths[]? // empty' <<< "$policy")
+mapfile -t allow_paths < <(yq -r '.auto_approve_paths[]? // empty' <<< "$policy")
 mapfile -t owner_teams < <(yq -r '.require.owner_teams[]? // empty' <<< "$policy")
 
 if [ "$enabled" != "true" ]; then
@@ -107,11 +107,18 @@ fi
 
 mapfile -t changed < <(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename')
 
-# --- Rule 1: sensitive paths ------------------------------------------------
-if [ "${#human_paths[@]}" -gt 0 ]; then
+# --- Rule 1: allowlist (every changed file must be explicitly allowed) -------
+# Fail-safe polarity: a path not on the allowlist defaults to a human, so a
+# newly-added sensitive dir is safe by default rather than auto-merged. An
+# empty allowlist or an empty changeset means nothing is auto-approvable.
+if [ "${#changed[@]}" -eq 0 ]; then
+  force_human=true; reason="no-files"
+elif [ "${#allow_paths[@]}" -eq 0 ]; then
+  force_human=true; reason="empty-allowlist"
+else
   for f in "${changed[@]}"; do
-    if path_matches_any "$f" "${human_paths[@]}"; then
-      force_human=true; reason="sensitive-path:$f"; break
+    if ! path_matches_any "$f" "${allow_paths[@]}"; then
+      force_human=true; reason="not-allowlisted:$f"; break
     fi
   done
 fi
