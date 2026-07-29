@@ -202,7 +202,8 @@ jobs:
           pi_home="$RUNNER_TEMP/pi-agent"
           mkdir -p "$pi_home"
           printf '{"name":"pi-agent-install","private":true}\n' > "$pi_home/package.json"
-          npm install --prefix "$pi_home" @earendil-works/pi-coding-agent
+          cd "$pi_home"
+          npm install @earendil-works/pi-coding-agent
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
@@ -398,7 +399,8 @@ jobs:
           pi_home="$RUNNER_TEMP/pi-agent"
           mkdir -p "$pi_home"
           printf '{"name":"pi-agent-install","private":true}\n' > "$pi_home/package.json"
-          npm install --prefix "$pi_home" @earendil-works/pi-coding-agent
+          cd "$pi_home"
+          npm install @earendil-works/pi-coding-agent
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
