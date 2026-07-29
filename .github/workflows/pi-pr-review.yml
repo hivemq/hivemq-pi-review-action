@@ -195,8 +195,15 @@ jobs:
       - name: Install Pi coding agent
         if: steps.deps.outputs.need_pi == 'true'
         run: |
-          npm install @earendil-works/pi-coding-agent
-          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+          # Install outside the consumer checkout. Run from here, npm adopts the
+          # caller's package.json as the project manifest and resolves their whole
+          # dependency tree using their .npmrc — which 401s on any private registry
+          # scope, since the review job holds no registry token.
+          pi_home="$RUNNER_TEMP/pi-agent"
+          mkdir -p "$pi_home"
+          printf '{"name":"pi-agent-install","private":true}\n' > "$pi_home/package.json"
+          npm install --prefix "$pi_home" @earendil-works/pi-coding-agent
+          echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
         uses: Homebrew/actions/setup-homebrew@15d0b666bf0311bfe676c178e0824dc1b52074a7 # master
@@ -387,8 +394,12 @@ jobs:
       - name: Install Pi coding agent
         if: steps.deps.outputs.need_pi == 'true'
         run: |
-          npm install @earendil-works/pi-coding-agent
-          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+          # Install outside the consumer checkout — see the review job above.
+          pi_home="$RUNNER_TEMP/pi-agent"
+          mkdir -p "$pi_home"
+          printf '{"name":"pi-agent-install","private":true}\n' > "$pi_home/package.json"
+          npm install --prefix "$pi_home" @earendil-works/pi-coding-agent
+          echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
         uses: Homebrew/actions/setup-homebrew@15d0b666bf0311bfe676c178e0824dc1b52074a7 # master
