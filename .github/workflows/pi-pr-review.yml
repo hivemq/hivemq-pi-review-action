@@ -15,7 +15,7 @@ on:
       runner-label:
         description: 'Runner label to use'
         required: false
-        default: 'github-actions-runner'
+        default: 'github-actions-runner-dev'
         type: string
       comment-style:
         description: 'How to post review findings: "global" for a single PR comment, "inline" for a PR review with line-level comments'
