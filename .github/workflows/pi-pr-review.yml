@@ -207,7 +207,7 @@ jobs:
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@15d0b666bf0311bfe676c178e0824dc1b52074a7 # master
+        uses: Homebrew/actions/setup-homebrew@5037c6f1012cc5ea0b9f03fedbaf9955ed9e51e0 # master
 
       - name: Install yq
         run: brew install yq
@@ -404,7 +404,7 @@ jobs:
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Set up Homebrew (for yq)
-        uses: Homebrew/actions/setup-homebrew@15d0b666bf0311bfe676c178e0824dc1b52074a7 # master
+        uses: Homebrew/actions/setup-homebrew@5037c6f1012cc5ea0b9f03fedbaf9955ed9e51e0 # master
 
       - name: Install yq
         run: brew install yq
