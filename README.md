@@ -19,7 +19,8 @@ registered by the pi extension in `review-contract/extension.mjs` and loaded wit
 `pi -e`. Pi validates the tool arguments against `review-contract/schema.js`
 before invoking it, and feeds any validation error back to the model as a tool
 error, so a malformed review costs a retry instead of being silently discarded.
-The tool writes the validated JSON to `$PI_REVIEW_OUTPUT` and ends the turn
+The tool also rejects invalid line-range relationships before writing output.
+It writes the validated JSON to `$PI_REVIEW_OUTPUT` and ends the turn
 (`terminate: true`), which skips a follow-up model call.
 
 The PR comment and the inline comments are both rendered from that JSON by

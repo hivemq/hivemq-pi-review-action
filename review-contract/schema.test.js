@@ -24,7 +24,7 @@ const valid = {
       fix: 'Redact the token.',
     },
   ],
-  questions: [{ text: 'Is this path reachable?', source: ['claude-opus-4.8'] }],
+  questions: [{ text: 'Is this path reachable?', source: ['claude-opus-5'] }],
   sequenceDiagram: null,
   reviewerAgreement: 'Reviewers agreed.',
 };
@@ -80,6 +80,11 @@ test('rejects a compound line ref smuggled into file (the `file:34,39-40` bug)',
   // The old parser re-split a single `file:line` string and mangled this. There is
   // no longer a string to mangle: line is a separate integer field.
   assert.ok(!check({ ...valid, issues: [{ ...valid.issues[0], line: '34,39-40' }] }));
+});
+
+test('rejects a missing line instead of silently treating it as a whole-file finding', () => {
+  const { line, ...noLine } = valid.issues[0];
+  assert.ok(!check({ ...valid, issues: [noLine] }));
 });
 
 test('rejects a non-integer line', () => {

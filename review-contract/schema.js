@@ -28,7 +28,7 @@ const reviewSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['severity', 'file', 'description'],
+        required: ['severity', 'file', 'line', 'description'],
         properties: {
           severity: {
             type: 'string',
@@ -96,4 +96,19 @@ const reviewSchema = {
   },
 };
 
-module.exports = { reviewSchema, SEVERITIES };
+// JSON Schema cannot express the ordering relationship between line and endLine
+// portably across every provider. Enforce that part of the contract in the tool
+// before writing the review, so pi reports the error to the model and lets it retry.
+function validateReviewSemantics(review) {
+  for (const [index, issue] of review.issues.entries()) {
+    if (issue.endLine == null) continue;
+    if (issue.line == null) {
+      throw new Error(`issues[${index}].endLine requires a non-null line`);
+    }
+    if (issue.endLine < issue.line) {
+      throw new Error(`issues[${index}].endLine must be greater than or equal to line`);
+    }
+  }
+}
+
+module.exports = { reviewSchema, validateReviewSemantics, SEVERITIES };
