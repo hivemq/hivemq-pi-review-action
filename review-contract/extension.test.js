@@ -60,3 +60,35 @@ test('execute throws when PI_REVIEW_OUTPUT is unset rather than dropping the rev
   const tool = createSubmitReviewTool({ writeOutput: async () => {}, env: {} });
   await assert.rejects(() => tool.execute('call-1', params), /PI_REVIEW_OUTPUT is not set/);
 });
+
+test('execute rejects endLine for a whole-file finding before writing output', async () => {
+  const { createSubmitReviewTool } = await load();
+  const writes = [];
+  const tool = createSubmitReviewTool({
+    writeOutput: async (...args) => writes.push(args),
+    env: { PI_REVIEW_OUTPUT: '/tmp/judge.json' },
+  });
+  const invalid = {
+    ...params,
+    issues: [{ ...params.issues[0], line: null, endLine: 14 }],
+  };
+
+  await assert.rejects(() => tool.execute('call-1', invalid), /endLine requires a non-null line/);
+  assert.strictEqual(writes.length, 0);
+});
+
+test('execute rejects a backwards line range before writing output', async () => {
+  const { createSubmitReviewTool } = await load();
+  const writes = [];
+  const tool = createSubmitReviewTool({
+    writeOutput: async (...args) => writes.push(args),
+    env: { PI_REVIEW_OUTPUT: '/tmp/judge.json' },
+  });
+  const invalid = {
+    ...params,
+    issues: [{ ...params.issues[0], line: 14, endLine: 10 }],
+  };
+
+  await assert.rejects(() => tool.execute('call-1', invalid), /endLine must be greater than or equal to line/);
+  assert.strictEqual(writes.length, 0);
+});

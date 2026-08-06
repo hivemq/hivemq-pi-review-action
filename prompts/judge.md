@@ -44,10 +44,11 @@ Field notes:
     behavior), `medium` (perf, maintainability), `low` (style, minor). Assign it
     from your own code verification, not the reviewers' ratings.
   - `file` — repository-relative path only. Never append a line number.
-  - `line` / `endLine` — integers. Use `line` alone for a single line, `line` plus
-    `endLine` for a range, and `line: null` for a whole-file finding. Do not pack
-    several locations into one issue; if a problem occurs at several lines, cite
-    the primary one, or split it into separate issues.
+  - `line` / `endLine` — always pass `line`: use an integer for a single line or
+    the start of a range, and `null` for a whole-file finding. For a range, pass an
+    `endLine` greater than or equal to `line`; never pass `endLine` with `line: null`.
+    Do not pack several locations into one issue; if a problem occurs at several
+    lines, cite the primary one, or split it into separate issues.
   - `description` — description with impact, max 3 lines.
   - `source` — labels of the model(s) that flagged this.
   - `fix` — max 3 lines, or `null` when not applicable.

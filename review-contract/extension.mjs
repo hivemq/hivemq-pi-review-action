@@ -13,7 +13,7 @@
 // stdout is no longer a reliable carrier for the final message.
 
 import { writeFile } from 'node:fs/promises';
-import { reviewSchema } from './schema.js';
+import { reviewSchema, validateReviewSemantics } from './schema.js';
 
 const OUTPUT_ENV = 'PI_REVIEW_OUTPUT';
 
@@ -33,6 +33,8 @@ export function createSubmitReviewTool({ writeOutput = writeFile, env = process.
     parameters: reviewSchema,
 
     async execute(_toolCallId, params) {
+      validateReviewSemantics(params);
+
       const target = env[OUTPUT_ENV];
       if (!target) {
         // Fail loudly. Silently succeeding here would reintroduce exactly the
