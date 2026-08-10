@@ -1,9 +1,11 @@
 name: Test
 
+# Runs on every pull request, deliberately without a `paths:` filter: a filtered
+# workflow produces no check run at all, which leaves the branch status pending
+# and blocks Renovate from automerging its action digest bumps. The suite takes
+# well under a second, so running it on every PR is effectively free.
 on:
   pull_request:
-    paths:
-      - 'post-inline-review/**'
 
 jobs:
   test:
