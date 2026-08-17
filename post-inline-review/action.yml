@@ -44,45 +44,52 @@ runs:
             q.source && q.source.length ? `${q.text} *(from: ${q.source.join(', ')})*` : q.text,
           );
 
-          if (comments.length === 0 && questions.length === 0) {
-            core.info('No inline comments or questions to post.');
-            return;
-          }
-
           // --- Clean up previous bot reviews ---
 
           const marker = '<!-- pi-judge -->';
-          const { data: reviews } = await github.rest.pulls.listReviews({
-            owner, repo, pull_number,
+          const reviews = await github.paginate(github.rest.pulls.listReviews, {
+            owner, repo, pull_number, per_page: 100,
           });
-          for (const review of reviews) {
-            if (review.user?.type !== 'Bot') continue;
+          const markedReviews = reviews.filter(
+            (review) => review.user?.type === 'Bot' && review.body?.includes(marker),
+          );
+          const markedReviewIds = new Set(markedReviews.map((review) => review.id));
+
+          // File-level comments are represented by reviews with empty bodies, so
+          // they carry the marker themselves. Fetch all review comments once rather
+          // than querying every bot review individually.
+          const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {
+            owner, repo, pull_number, per_page: 100,
+          });
+          const commentsToDelete = reviewComments.filter((comment) =>
+            comment.user?.type === 'Bot'
+              && (markedReviewIds.has(comment.pull_request_review_id) || comment.body?.includes(marker)),
+          );
+          for (const comment of commentsToDelete) {
             try {
-              const markedReview = review.body?.includes(marker);
-              const { data: reviewComments } = await github.rest.pulls.listCommentsForReview({
-                owner, repo, pull_number, review_id: review.id, per_page: 100,
+              await github.rest.pulls.deleteReviewComment({
+                owner, repo, comment_id: comment.id,
               });
-              // File-level comments are each represented by a separate review with
-              // an empty body, so put the marker in the comment body and find them
-              // there. For a marked aggregate review, every child comment is ours.
-              const commentsToDelete = markedReview
-                ? reviewComments
-                : reviewComments.filter((rc) => rc.body?.includes(marker));
-              for (const rc of commentsToDelete) {
-                await github.rest.pulls.deleteReviewComment({
-                  owner, repo, comment_id: rc.id,
-                });
-              }
-              if (markedReview) {
-                // Replace the review body with a superseded notice
-                await github.rest.pulls.updateReview({
-                  owner, repo, pull_number, review_id: review.id,
-                  body: `${marker}\n*Superseded by newer review.*`,
-                });
-              }
             } catch (e) {
-              core.warning(`Could not clean up review ${review.id}: ${e.message}`);
+              core.warning(`Could not delete review comment ${comment.id}: ${e.message}`);
             }
+          }
+          for (const review of markedReviews) {
+            try {
+              await github.rest.pulls.updateReview({
+                owner, repo, pull_number, review_id: review.id,
+                body: `${marker}\n*Superseded by newer review.*`,
+              });
+            } catch (e) {
+              core.warning(`Could not supersede review ${review.id}: ${e.message}`);
+            }
+          }
+
+          // Cleanup must still run when the latest judge found nothing, otherwise
+          // findings from an older run remain visible after a clean review.
+          if (comments.length === 0 && questions.length === 0) {
+            core.info('No inline comments or questions to post.');
+            return;
           }
 
           // --- Partition comments into on-diff and off-diff ---
