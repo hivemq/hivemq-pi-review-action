@@ -101,6 +101,13 @@ const reviewSchema = {
 // before writing the review, so pi reports the error to the model and lets it retry.
 function validateReviewSemantics(review) {
   for (const [index, issue] of review.issues.entries()) {
+    // Catch the old `file:34,39-40` shape explicitly. Without this check it is
+    // valid JSON, but later misses the changed-file lookup and disappears.
+    if (/:\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$/.test(issue.file)) {
+      throw new Error(
+        `issues[${index}].file must not contain a line reference; use line and endLine instead`,
+      );
+    }
     if (issue.endLine == null) continue;
     if (issue.line == null) {
       throw new Error(`issues[${index}].endLine requires a non-null line`);
