@@ -56,22 +56,30 @@ runs:
             owner, repo, pull_number,
           });
           for (const review of reviews) {
-            if (review.user?.type !== 'Bot' || !review.body?.includes(marker)) continue;
+            if (review.user?.type !== 'Bot') continue;
             try {
-              // Delete inline comments from the old review
+              const markedReview = review.body?.includes(marker);
               const { data: reviewComments } = await github.rest.pulls.listCommentsForReview({
                 owner, repo, pull_number, review_id: review.id, per_page: 100,
               });
-              for (const rc of reviewComments) {
+              // File-level comments are each represented by a separate review with
+              // an empty body, so put the marker in the comment body and find them
+              // there. For a marked aggregate review, every child comment is ours.
+              const commentsToDelete = markedReview
+                ? reviewComments
+                : reviewComments.filter((rc) => rc.body?.includes(marker));
+              for (const rc of commentsToDelete) {
                 await github.rest.pulls.deleteReviewComment({
                   owner, repo, comment_id: rc.id,
                 });
               }
-              // Replace the review body with a superseded notice
-              await github.rest.pulls.updateReview({
-                owner, repo, pull_number, review_id: review.id,
-                body: `${marker}\n*Superseded by newer review.*`,
-              });
+              if (markedReview) {
+                // Replace the review body with a superseded notice
+                await github.rest.pulls.updateReview({
+                  owner, repo, pull_number, review_id: review.id,
+                  body: `${marker}\n*Superseded by newer review.*`,
+                });
+              }
             } catch (e) {
               core.warning(`Could not clean up review ${review.id}: ${e.message}`);
             }
@@ -157,7 +165,7 @@ runs:
                 commit_id: pr.head.sha,
                 path: c.path,
                 subject_type: 'file',
-                body: formatFileLevelBody(c),
+                body: `${formatFileLevelBody(c)}\n\n${marker}`,
               });
             } catch (e) {
               core.warning(`Could not post file-level comment on ${c.path}: ${e.message}`);
