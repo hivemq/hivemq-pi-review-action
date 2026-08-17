@@ -151,27 +151,8 @@ runs:
 
           // --- Assemble review body ---
 
-          let reviewBody = '<!-- pi-judge -->\n';
-          if (kept.length > 0) {
-            const counts = {};
-            for (const c of kept) {
-              counts[c.severity] = (counts[c.severity] || 0) + 1;
-            }
-            const severityEmoji = { critical: '🔥', high: '⚠️', medium: '👀', low: '📝' };
-            const severityOrder = ['critical', 'high', 'medium', 'low'];
-            const parts = severityOrder
-              .filter(s => counts[s])
-              .map(s => `${severityEmoji[s]} **${counts[s]}** ${s}`);
-            reviewBody += `${parts.join(' · ')}\n\n${kept.length} findings. See inline review comments for details.\n`;
-          } else {
-            reviewBody += 'No actionable findings.\n';
-          }
-          if (questions.length > 0) {
-            reviewBody += '\n## Questions\n\n';
-            for (const q of questions) {
-              reviewBody += `- ${q}\n`;
-            }
-          }
+          const { buildReviewBody } = require(`${process.env.ACTION_PATH}/review-body.js`);
+          const reviewBody = buildReviewBody(questions, onDiff.length);
 
           // --- Submit review ---
 
@@ -179,15 +160,17 @@ runs:
           // keep every onDiff comment resolvable, but don't let an unexpected
           // GitHub API error (rate limit, an edge case we didn't anticipate, etc.)
           // take down the whole job and lose the off-diff comments below with it.
-          try {
-            await github.rest.pulls.createReview({
-              owner, repo, pull_number,
-              event: 'COMMENT',
-              body: reviewBody,
-              comments: onDiff,
-            });
-          } catch (e) {
-            core.warning(`Could not create review with ${onDiff.length} inline comment(s): ${e.message}`);
+          if (reviewBody !== null) {
+            try {
+              await github.rest.pulls.createReview({
+                owner, repo, pull_number,
+                event: 'COMMENT',
+                body: reviewBody,
+                comments: onDiff,
+              });
+            } catch (e) {
+              core.warning(`Could not create review with ${onDiff.length} inline comment(s): ${e.message}`);
+            }
           }
 
           // --- Post off-diff findings as file-level comments ---

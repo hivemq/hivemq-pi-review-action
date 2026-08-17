@@ -28,6 +28,7 @@ If the input file is missing or empty, report that no reviews were available to 
 - When reviewers disagree on severity, pick based on your own code verification.
 - Credit the originating model(s) for each issue.
 - Only judge issues the reviewers found.
+- Never use emoji anywhere in the output, even if a reviewer's text contains them.
 
 ## Output format (must match exactly)
 <h2>PR Review</h2>

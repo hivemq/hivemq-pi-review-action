@@ -39,6 +39,8 @@ Use the review plan's `Sequence diagram` decision:
 - If the plan is missing or has no decision, include a diagram only when the PR changes meaningful runtime/control/data flow.
 
 ## Output format (must match exactly)
+Never use emoji anywhere in the output.
+
 <h2>PR Review</h2>
 
 <h3>Summary</h3>
