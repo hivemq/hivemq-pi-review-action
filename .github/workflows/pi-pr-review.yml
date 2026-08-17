@@ -464,12 +464,10 @@ jobs:
         run: |
           set -o pipefail
           # The judge returns its review by calling the submit_review tool, which
-          # writes PI_REVIEW_OUTPUT. stdout is only kept for the job log: the tool
-          # terminates the turn, so there is no final assistant message to parse.
+          # writes PI_REVIEW_OUTPUT and terminates the turn.
           pi -p --model ${{ needs.setup.outputs.judge-model }} ${{ needs.setup.outputs.judge-thinking && format('--thinking {0}', needs.setup.outputs.judge-thinking) || '' }} --no-session \
             -e .pi-review-action/review-contract/extension.mjs \
-            "$(cat "${{ steps.judge_prompt.outputs.path }}")" \
-            | tee pi-judge-stdout.txt
+            "$(cat "${{ steps.judge_prompt.outputs.path }}")"
 
           # Fail closed. Previously a judge that drifted from the prescribed format
           # produced zero findings and a green job.
@@ -576,6 +574,5 @@ jobs:
           path: |
             pi-judge-review.json
             pi-judge-output.md
-            pi-judge-stdout.txt
             judge-input.md
           if-no-files-found: ignore
