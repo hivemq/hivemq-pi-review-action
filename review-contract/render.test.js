@@ -127,9 +127,9 @@ test('escapes HTML in model-supplied text so a description cannot break the mark
   assert.ok(!md.includes('<script>'), md);
 });
 
-test('severity counts render badges in severity order', () => {
+test('severity counts render in severity order', () => {
   const comments = toComments(
     review({ issues: [issue({ severity: 'high' }), issue({ severity: 'critical' }), issue({ severity: 'high' })] }),
   );
-  assert.strictEqual(severityCounts(comments), '🔥 **1** critical · ⚠️ **2** high');
+  assert.strictEqual(severityCounts(comments), '**1** critical · **2** high');
 });
