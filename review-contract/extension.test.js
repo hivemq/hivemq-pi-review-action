@@ -61,6 +61,25 @@ test('execute throws when PI_REVIEW_OUTPUT is unset rather than dropping the rev
   await assert.rejects(() => tool.execute('call-1', params), /PI_REVIEW_OUTPUT is not set/);
 });
 
+test('execute rejects a line ref smuggled into file before writing output', async () => {
+  const { createSubmitReviewTool } = await load();
+  const writes = [];
+  const tool = createSubmitReviewTool({
+    writeOutput: async (...args) => writes.push(args),
+    env: { PI_REVIEW_OUTPUT: '/tmp/judge.json' },
+  });
+  const invalid = {
+    ...params,
+    issues: [{ ...params.issues[0], file: 'src/db.ts:10,14-16' }],
+  };
+
+  await assert.rejects(
+    () => tool.execute('call-1', invalid),
+    /file must not contain a line reference; use line and endLine instead/,
+  );
+  assert.strictEqual(writes.length, 0);
+});
+
 test('execute rejects endLine for a whole-file finding before writing output', async () => {
   const { createSubmitReviewTool } = await load();
   const writes = [];

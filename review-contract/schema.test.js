@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { Compile } = require('typebox/compile');
-const { reviewSchema } = require('./schema');
+const { reviewSchema, validateReviewSemantics } = require('./schema');
 
 // typebox is the validator pi itself uses (packages/ai/src/utils/validation.ts
 // imports Compile from "typebox/compile"), so checking against it here tests the
@@ -76,10 +76,19 @@ test('rejects an empty description', () => {
   assert.ok(!check({ ...valid, issues: [{ ...valid.issues[0], description: '' }] }));
 });
 
-test('rejects a compound line ref smuggled into file (the `file:34,39-40` bug)', () => {
-  // The old parser re-split a single `file:line` string and mangled this. There is
-  // no longer a string to mangle: line is a separate integer field.
+test('rejects a compound line ref in the typed line field', () => {
   assert.ok(!check({ ...valid, issues: [{ ...valid.issues[0], line: '34,39-40' }] }));
+});
+
+test('semantic validation rejects a line ref smuggled into file (the `file:34,39-40` bug)', () => {
+  const review = {
+    ...valid,
+    issues: [{ ...valid.issues[0], file: 'src/auth.ts:34,39-40', line: 34 }],
+  };
+  assert.throws(
+    () => validateReviewSemantics(review),
+    /file must not contain a line reference; use line and endLine instead/,
+  );
 });
 
 test('rejects a missing line instead of silently treating it as a whole-file finding', () => {
