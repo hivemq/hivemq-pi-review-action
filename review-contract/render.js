@@ -121,15 +121,12 @@ function renderMarkdown(review) {
   return out.join('\n');
 }
 
-// Severity tally for the inline review body, e.g. "🔥 **1** critical · ⚠️ **2** high".
-// Mirrors the badges main already posts; changing them is out of scope here.
-const SEVERITY_EMOJI = { critical: '🔥', high: '⚠️', medium: '👀', low: '📝' };
-
+// Severity tally for the inline review body, e.g. "**1** critical · **2** high".
 function severityCounts(comments) {
   const counts = {};
   for (const c of comments) counts[c.severity] = (counts[c.severity] || 0) + 1;
   return SEVERITY_ORDER.filter((s) => counts[s])
-    .map((s) => `${SEVERITY_EMOJI[s]} **${counts[s]}** ${s}`)
+    .map((s) => `**${counts[s]}** ${s}`)
     .join(' · ');
 }
 
