@@ -95,11 +95,15 @@ jobs:
 
 ## Composite Action Outputs
 
-| Output         | Description                                          |
-|----------------|------------------------------------------------------|
-| `should-run`   | Whether the review should run (`true`/`false`)       |
-| `pr-number`    | The PR number to review                              |
-| `post-comment` | Whether to post/update a PR comment (`true`/`false`) |
+| Output                  | Description                                                          |
+|-------------------------|--------------------------------------------------------------------|
+| `should-run`            | Whether the review should run (`true`/`false`)                     |
+| `pr-number`             | The PR number to review                                            |
+| `post-comment`          | Whether to post/update a PR comment (`true`/`false`)              |
+| `trigger-kind`          | How the review was triggered: `auto` \| `manual` \| `comment` \| `dispatch` |
+| `auto-approve-eligible` | Stage 1 gate: PR is a candidate for AI auto-approve (`true`/`false`) |
+| `force-human`           | Stage 1 gate: a hard rule requires a human reviewer (`true`/`false`) |
+| `gate-reason`           | Stage 1 gate: short machine reason for the verdict                |
 
 ## Reusable Workflow Inputs
 
@@ -180,6 +184,42 @@ The composite action handles three event types:
 | `workflow_dispatch` | Always runs                            | From input (default: `false`) |
 | `issue_comment`     | PR comment starting with `/review` by allowed author association | `true`                        |
 | `pull_request`      | Non-draft PR with `review` label added, or any PR (incl. drafts) with `manual-review` label added | `true`                        |
+
+## Auto-approve sensitivity gate (Stage 1)
+
+When `should-run` is `true`, the composite action also runs a **deterministic**
+gate that decides whether a PR is a candidate for AI auto-approve+merge, or must
+go to a human. It never calls an LLM — the aim is that a malicious PR cannot talk
+its way past it. It exposes its verdict via the `auto-approve-eligible`,
+`force-human`, and `gate-reason` outputs; a later stage (the approver) consumes
+these. The gate acts only on the **`auto` trigger** (a bot-applied `review`
+label); `/review` comments, `manual-review`, and dispatch are always
+human-initiated and never eligible.
+
+The gate is opt-in per repo via **`.github/auto-approve.yml`**. With no such file
+the gate is a no-op (`gate-reason=no-policy`). The policy file and `CODEOWNERS`
+are read from the PR's **base** ref, so a PR cannot weaken the gate that judges
+it. See [`examples/auto-approve.yml`](examples/auto-approve.yml).
+
+The gate uses an **allowlist**, not a blocklist — fail-safe by design. A path
+that is not explicitly allowed defaults to a human, so a newly-added sensitive
+directory is safe by default rather than auto-merged, and the list stays short
+instead of growing into tech debt. A PR is sent to a human (`force-human=true`)
+if **any** of these hold:
+
+- **any** changed file does not match an `auto_approve_paths` glob (`gate-reason=not-allowlisted:<file>`), or the allowlist/changeset is empty;
+- a changed file is owned (per `CODEOWNERS`) by a team not in `require.owner_teams`;
+- the `prompt_injection_guard` heuristic matches the PR title, body, or diff.
+
+Otherwise (every changed file is allowlisted and no other rule trips) the PR is
+marked `auto-approve-eligible=true`. In `mode: enforce` a
+`force-human` verdict also applies the `human_label` (default
+`human-review-required`); in `mode: shadow` it only logs. The gate fails safe:
+missing tooling or an unreadable policy yields *not eligible*, never a blind
+approve.
+
+The gate needs `contents:read` + `pull-requests:read`, plus `issues:write` to
+apply the label in `enforce` mode.
 
 ## License
 
