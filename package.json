@@ -6,6 +6,6 @@
     "test": "node --test post-inline-review/*.test.js review-contract/*.test.js"
   },
   "devDependencies": {
-    "typebox": "1.3.7"
+    "typebox": "1.3.15"
   }
 }
