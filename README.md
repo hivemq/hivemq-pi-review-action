@@ -85,6 +85,7 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
+      PI_ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
 ```
 
 ## Composite Action Inputs
@@ -149,6 +150,7 @@ To opt in, pass `comment-style: inline` in the caller workflow:
 | `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (used by DeepSeek v4 Pro)    |
 | `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 5)     |
 | `PI_OPENROUTER_API_KEY` | OpenRouter API key (optional; for OpenRouter models) |
+| `PI_ZAI_API_KEY`        | Z.AI API key (optional; for `zai/*` models)   |
 
 The legacy un-prefixed names (e.g. `ANTHROPIC_API_KEY`) are still accepted as a fallback during migration.
 
