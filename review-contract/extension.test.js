@@ -13,7 +13,6 @@ const params = {
     { severity: 'high', file: 'src/db.ts', line: 10, endLine: null, description: 'N+1.', source: ['gpt'], fix: null },
   ],
   questions: [],
-  sequenceDiagram: null,
   reviewerAgreement: null,
 };
 

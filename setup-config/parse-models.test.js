@@ -106,6 +106,41 @@ test('strips routing from the review matrix but keeps the model untouched', () =
   assert.strictEqual(outputs['judge-thinking'], 'max');
 });
 
+test('labels the judge by the model\'s last path segment, or an explicit label', () => {
+  assert.strictEqual(run(JSON.stringify(GLM_CONFIG)).outputs['judge-label'], 'glm-5.3-flash');
+  assert.strictEqual(run(undefined).outputs['judge-label'], 'gpt-5.6-sol');
+
+  const labelled = run(JSON.stringify({
+    review: [{ model: 'openai/gpt-5.6-sol', label: 'gpt-5.6-sol' }],
+    judge: { model: 'openrouter/z-ai/glm-5.3-flash', label: 'flash-judge' },
+  }));
+  assert.strictEqual(labelled.outputs['judge-label'], 'flash-judge');
+});
+
+test('allows one model as both reviewer and judge when the routing agrees', () => {
+  const routing = { order: ['baseten', 'z-ai'], allow_fallbacks: false };
+  const { outputs, failed } = run(JSON.stringify({
+    review: [{ model: 'openrouter/z-ai/glm-5.3-flash', label: 'glm-5.3-flash', routing }],
+    judge: { model: 'openrouter/z-ai/glm-5.3-flash', routing },
+  }));
+  assert.strictEqual(failed, null);
+  const overrides = JSON.parse(outputs['models-json']).providers.openrouter.modelOverrides;
+  assert.deepStrictEqual(Object.keys(overrides), ['z-ai/glm-5.3-flash']);
+  assert.deepStrictEqual(overrides['z-ai/glm-5.3-flash'].compat.openRouterRouting, routing);
+});
+
+test('fails rather than silently dropping one routing when the same model disagrees', () => {
+  const { failed } = run(JSON.stringify({
+    review: [{
+      model: 'openrouter/z-ai/glm-5.3-flash',
+      label: 'glm-5.3-flash',
+      routing: { order: ['z-ai', 'novita'] },
+    }],
+    judge: { model: 'openrouter/z-ai/glm-5.3-flash', routing: { order: ['baseten', 'z-ai'] } },
+  }));
+  assert.match(failed ?? '', /used more than once with conflicting 'routing'/);
+});
+
 test('fails when routing is set on a non-openrouter model', () => {
   const { failed } = run(JSON.stringify({
     review: [{ model: 'zai/glm-5.3', label: 'glm-5.3', routing: { order: ['z-ai'] } }],

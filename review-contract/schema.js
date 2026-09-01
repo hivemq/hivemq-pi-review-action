@@ -84,11 +84,6 @@ const reviewSchema = {
         },
       },
     },
-    sequenceDiagram: {
-      type: ['string', 'null'],
-      description:
-        'Mermaid sequenceDiagram body, without the ```mermaid fence. Null when fewer than 2 reviewers supplied one.',
-    },
     reviewerAgreement: {
       type: ['string', 'null'],
       description: '1-2 sentences on how much the reviewers agreed and where they diverged.',
