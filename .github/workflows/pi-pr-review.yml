@@ -68,6 +68,7 @@ jobs:
       review-matrix: ${{ steps.parse.outputs.review-matrix }}
       judge-model: ${{ steps.parse.outputs.judge-model }}
       judge-thinking: ${{ steps.parse.outputs.judge-thinking }}
+      models-json: ${{ steps.parse.outputs.models-json }}
     steps:
       - name: Parse model config
         id: parse
@@ -91,6 +92,7 @@ jobs:
               core.setOutput('review-matrix', JSON.stringify(defaultConfig.review));
               core.setOutput('judge-model', defaultConfig.judge.model);
               core.setOutput('judge-thinking', defaultConfig.judge.thinking);
+              core.setOutput('models-json', '');
               return;
             }
 
@@ -122,9 +124,28 @@ jobs:
               return;
             }
 
-            core.setOutput('review-matrix', JSON.stringify(config.review));
+            // `routing` pins OpenRouter provider selection. pi only reads that from
+            // models.json, so collect it here into an overlay the review and judge
+            // jobs drop at ~/.pi/agent/models.json.
+            const modelOverrides = {};
+            for (const entry of [...config.review, config.judge]) {
+              if (!entry.routing) continue;
+              if (!entry.model.startsWith('openrouter/')) {
+                core.setFailed(`'routing' is OpenRouter-only, but '${entry.model}' is not an openrouter/* model`);
+                return;
+              }
+              modelOverrides[entry.model.slice('openrouter/'.length)] = {
+                compat: { openRouterRouting: entry.routing },
+              };
+            }
+            const modelsJson = Object.keys(modelOverrides).length
+              ? JSON.stringify({ providers: { openrouter: { modelOverrides } } })
+              : '';
+
+            core.setOutput('review-matrix', JSON.stringify(config.review.map(({ routing, ...rest }) => rest)));
             core.setOutput('judge-model', config.judge.model);
             core.setOutput('judge-thinking', config.judge.thinking || '');
+            core.setOutput('models-json', modelsJson);
 
   pi_review:
     name: "Pi Review (${{ matrix.label }})"
@@ -207,6 +228,15 @@ jobs:
           cd "$pi_home"
           npm install @earendil-works/pi-coding-agent
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Apply model routing overrides
+        if: needs.setup.outputs.models-json != ''
+        env:
+          PI_MODELS_JSON: ${{ needs.setup.outputs.models-json }}
+        run: |
+          mkdir -p "$HOME/.pi/agent"
+          printf '%s\n' "$PI_MODELS_JSON" > "$HOME/.pi/agent/models.json"
+          cat "$HOME/.pi/agent/models.json"
 
       - name: Set up Homebrew (for yq)
         uses: Homebrew/actions/setup-homebrew@3cdb78d0f62ad29dd32de765782654f4eedea607 # master
@@ -406,6 +436,15 @@ jobs:
           cd "$pi_home"
           npm install @earendil-works/pi-coding-agent
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Apply model routing overrides
+        if: needs.setup.outputs.models-json != ''
+        env:
+          PI_MODELS_JSON: ${{ needs.setup.outputs.models-json }}
+        run: |
+          mkdir -p "$HOME/.pi/agent"
+          printf '%s\n' "$PI_MODELS_JSON" > "$HOME/.pi/agent/models.json"
+          cat "$HOME/.pi/agent/models.json"
 
       - name: Set up Homebrew (for yq)
         uses: Homebrew/actions/setup-homebrew@3cdb78d0f62ad29dd32de765782654f4eedea607 # master

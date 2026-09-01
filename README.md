@@ -173,6 +173,15 @@ the following defaults are used:
 Each review entry requires `model` and `label`. The `thinking` field is optional. The `judge` object requires `model`;
 `thinking` is optional.
 
+Review and judge entries also accept an optional `routing` object for `openrouter/*` models, sent as-is in the
+[OpenRouter `provider` field](https://openrouter.ai/docs/guides/routing/provider-selection) to pin which upstream
+providers serve the model:
+
+```json
+{ "model": "openrouter/z-ai/glm-5.3", "thinking": "max", "label": "glm-5.3",
+  "routing": { "order": ["z-ai", "novita"], "allow_fallbacks": false } }
+```
+
 ## Event Handling
 
 The composite action handles three event types:
