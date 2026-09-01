@@ -14,7 +14,6 @@ const review = (overrides = {}) => ({
   summary: 'Looks fine.',
   issues: [],
   questions: [],
-  sequenceDiagram: null,
   reviewerAgreement: null,
   ...overrides,
 });
@@ -110,15 +109,6 @@ test('renders an issue with source and fix as nested list items', () => {
   assert.ok(md.includes('<strong>[high]</strong> <code>src/db.ts:10</code> - N+1 query.'), md);
   assert.ok(md.includes('<strong>Source:</strong> gpt-5.6-sol'), md);
   assert.ok(md.includes('<strong>Fix:</strong> Batch it.'), md);
-});
-
-test('omits the Sequence Diagram section when there is no diagram', () => {
-  assert.ok(!renderMarkdown(review()).includes('Sequence Diagram'));
-});
-
-test('fences the diagram when present', () => {
-  const md = renderMarkdown(review({ sequenceDiagram: 'sequenceDiagram\n  A->>B: hi' }));
-  assert.ok(md.includes('```mermaid\nsequenceDiagram\n  A->>B: hi\n```'), md);
 });
 
 test('escapes HTML in model-supplied text so a description cannot break the markup', () => {

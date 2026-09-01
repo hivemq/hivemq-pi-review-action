@@ -18,7 +18,6 @@ Produce a concise, actionable plan that helps a reviewer inspect the PR.
 4. For each changed file, find files it imports or calls, and existing files that solve a similar problem.
 5. Call out architectural choices that deviate from existing patterns.
 6. Define focused review checks for security, correctness, consistency, and API usage.
-7. Decide whether a sequence diagram is required for this PR.
 
 ## Output format
 Output plain text only (no Markdown code fences), using this exact structure:
@@ -40,10 +39,6 @@ Focus areas:
 - Performance: [hot paths, queries, async concerns]
 - Consistency: [patterns/files to compare against]
 - API usage: [external or internal APIs to validate]
-
-Sequence diagram:
-- Decision: required | optional
-- Reason: [brief rationale tied to runtime/control/data-flow complexity]
 
 ## Guidelines
 - Call out any security-sensitive code (auth, tokens, credentials)

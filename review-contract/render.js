@@ -112,9 +112,6 @@ function renderMarkdown(review) {
   }
   out.push('');
 
-  if (review.sequenceDiagram) {
-    out.push('<h3>Sequence Diagram</h3>', '', '```mermaid', review.sequenceDiagram, '```', '');
-  }
   if (review.reviewerAgreement) {
     out.push('<h3>Reviewer Agreement</h3>', `<p>${escapeHtml(review.reviewerAgreement)}</p>`);
   }

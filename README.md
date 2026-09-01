@@ -4,7 +4,7 @@ AI-powered pull request reviews using multiple models in parallel, with a judge 
 
 ## Features
 
-- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.5, Claude Opus 5, DeepSeek v4 Pro)
+- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.6 Sol, Claude Opus 5, DeepSeek v4 Flash)
 - **Judge synthesis**: A judge model verifies issues against actual code, deduplicates, and produces a final consensus
   review
 - **PR comment upsert**: Posts/updates a single judge comment on the PR (with `<!-- pi-judge -->` marker)
@@ -146,8 +146,8 @@ To opt in, pass `comment-style: inline` in the caller workflow:
 
 | Secret                  | Description                                   |
 |-------------------------|-----------------------------------------------|
-| `PI_OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.5 and judge)    |
-| `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (used by DeepSeek v4 Pro)    |
+| `PI_OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.6 Sol and judge)    |
+| `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (used by DeepSeek v4 Flash)    |
 | `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 5)     |
 | `PI_OPENROUTER_API_KEY` | OpenRouter API key (optional; for OpenRouter models) |
 | `PI_ZAI_API_KEY`        | Z.AI API key (optional; for `zai/*` models)   |
@@ -164,14 +164,14 @@ the following defaults are used:
   "review": [
     { "model": "openai/gpt-5.6-sol", "thinking": "medium", "label": "gpt-5.6-sol" },
     { "model": "anthropic/claude-opus-5", "thinking": "medium", "label": "claude-opus-5" },
-    { "model": "deepseek/deepseek-v4-pro", "thinking": "high", "label": "deepseek-v4-pro" }
+    { "model": "deepseek/deepseek-v4-flash", "thinking": "high", "label": "deepseek-v4-flash" }
   ],
   "judge": { "model": "openai/gpt-5.6-sol", "thinking": "medium" }
 }
 ```
 
 Each review entry requires `model` and `label`. The `thinking` field is optional. The `judge` object requires `model`;
-`thinking` is optional.
+`thinking` and `label` are optional, with `label` defaulting to the model's last path segment and naming the judge job.
 
 Review and judge entries also accept an optional `routing` object for `openrouter/*` models, sent as-is in the
 [OpenRouter `provider` field](https://openrouter.ai/docs/guides/routing/provider-selection) to pin which upstream

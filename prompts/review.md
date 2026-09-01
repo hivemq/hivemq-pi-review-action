@@ -15,7 +15,6 @@ Read these environment variables for context:
    - Files they import or call, and existing files that solve a similar problem
    - Architectural choices that deviate from existing patterns
    - Focus areas (contracts, correctness, security, consistency)
-   - Sequence diagram decision (required | optional)
 
 2. Read all files in parallel:
    - Read `AGENTS.md` if present.
@@ -31,12 +30,6 @@ Read these environment variables for context:
    - **Security**: Auth handling, input validation, secret leakage
    - **Performance**: Unnecessary allocations, N+1 queries, blocking calls in async code, algorithmic complexity
    - **Consistency**: Compare against similar implementations and codebase patterns
-
-## Diagram policy
-Use the review plan's `Sequence diagram` decision:
-- If `Decision: required`, include one Mermaid sequence diagram for the actual runtime/control/data flow.
-- If `Decision: optional`, omit the sequence diagram section.
-- If the plan is missing or has no decision, include a diagram only when the PR changes meaningful runtime/control/data flow.
 
 ## Output format (must match exactly)
 <h2>PR Review</h2>
@@ -67,15 +60,5 @@ Use an HTML ordered list with one `<li>` per clarification question:
 </ol>
 If none:
 <p>None.</p>
-
-If diagram is required, include:
-<h3>Sequence Diagram</h3>
-
-```mermaid
-sequenceDiagram
-    [runtime/control/data flow introduced by this PR]
-```
-
-If diagram is optional, omit the entire Sequence Diagram section.
 
 Return only the final review Markdown.

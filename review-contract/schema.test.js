@@ -25,7 +25,6 @@ const valid = {
     },
   ],
   questions: [{ text: 'Is this path reachable?', source: ['claude-opus-5'] }],
-  sequenceDiagram: null,
   reviewerAgreement: 'Reviewers agreed.',
 };
 

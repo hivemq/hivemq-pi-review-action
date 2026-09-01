@@ -54,11 +54,6 @@ Field notes:
   - `fix` — max 3 lines, or `null` when not applicable.
 - `questions` — substantive, non-redundant clarification questions, each with the
   model(s) it came from. Pass an empty list when there are none.
-- `sequenceDiagram` — if 2+ reviewers included a sequence diagram, pick the one
-  that most accurately reflects the actual code (verify against the files you
-  read), or merge them if they cover complementary parts of the flow. Pass the
-  Mermaid body without the code fence. If fewer than 2 reviewers included a
-  diagram, pass `null`.
 - `reviewerAgreement` — 1-2 sentences on how much the reviewers agreed and where
   they diverged.
 
