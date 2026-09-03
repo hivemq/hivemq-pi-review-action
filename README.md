@@ -147,9 +147,9 @@ To opt in, pass `comment-style: inline` in the caller workflow:
 | Secret                  | Description                                   |
 |-------------------------|-----------------------------------------------|
 | `PI_OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.6 Sol and judge)    |
-| `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (used by DeepSeek v4 Flash)    |
+| `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (optional; for direct `deepseek/*` models) |
 | `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 5)     |
-| `PI_OPENROUTER_API_KEY` | OpenRouter API key (optional; for OpenRouter models) |
+| `PI_OPENROUTER_API_KEY` | OpenRouter API key (used by DeepSeek v4 Flash and other `openrouter/*` models) |
 | `PI_ZAI_API_KEY`        | Z.AI API key (optional; for `zai/*` models)   |
 
 The legacy un-prefixed names (e.g. `ANTHROPIC_API_KEY`) are still accepted as a fallback during migration.
@@ -164,7 +164,8 @@ the following defaults are used:
   "review": [
     { "model": "openai/gpt-5.6-sol", "thinking": "medium", "label": "gpt-5.6-sol" },
     { "model": "anthropic/claude-opus-5", "thinking": "medium", "label": "claude-opus-5" },
-    { "model": "deepseek/deepseek-v4-flash", "thinking": "high", "label": "deepseek-v4-flash" }
+    { "model": "openrouter/deepseek/deepseek-v4-flash-0731", "thinking": "xhigh", "label": "deepseek-v4-flash",
+      "routing": { "order": ["deepseek", "baseten"], "allow_fallbacks": false } }
   ],
   "judge": { "model": "openai/gpt-5.6-sol", "thinking": "medium" }
 }
