@@ -90,6 +90,10 @@ jobs:
                   // or vouches for; the rest of OpenRouter's pool is third-party
                   // requantizations, so pin rather than let it pick.
                   routing: { order: ['deepseek', 'baseten'], allow_fallbacks: false },
+                  // pi's catalog takes maxTokens (943718) from the most permissive
+                  // endpoint, but DeepSeek's own caps completions at 384000 and
+                  // rejects anything larger outright. Cap to what both pins accept.
+                  'max-tokens': 384000,
                 },
               ],
               judge: { model: 'openai/gpt-5.6-sol', thinking: 'medium' },
@@ -135,32 +139,36 @@ jobs:
               return;
             }
 
-            // `routing` pins OpenRouter provider selection. pi only reads that from
-            // models.json, so collect it here into an overlay the review and judge
-            // jobs drop at ~/.pi/agent/models.json.
+            // `routing` pins OpenRouter provider selection and `max-tokens` caps the
+            // completion budget. pi only reads either from models.json, so collect
+            // them here into an overlay the review and judge jobs drop at
+            // ~/.pi/agent/models.json.
             const modelOverrides = {};
             for (const entry of [...config.review, config.judge]) {
-              if (!entry.routing) continue;
+              if (!entry.routing && entry['max-tokens'] === undefined) continue;
               if (!entry.model.startsWith('openrouter/')) {
-                core.setFailed(`'routing' is OpenRouter-only, but '${entry.model}' is not an openrouter/* model`);
+                core.setFailed(`'routing' and 'max-tokens' are OpenRouter-only, but '${entry.model}' is not an openrouter/* model`);
                 return;
               }
+              const override = {};
+              if (entry.routing) override.compat = { openRouterRouting: entry.routing };
+              if (entry['max-tokens'] !== undefined) override.maxTokens = entry['max-tokens'];
+
               // models.json is keyed by model, so the same model used twice (say as
-              // reviewer and judge) shares one routing entry. Silently letting the
-              // last one win would discard the other's pins, so demand they agree.
+              // reviewer and judge) shares one entry. Silently letting the last one
+              // win would discard the other's settings, so demand they agree.
               const key = entry.model.slice('openrouter/'.length);
-              const routing = JSON.stringify(entry.routing);
-              if (modelOverrides[key] && JSON.stringify(modelOverrides[key].compat.openRouterRouting) !== routing) {
-                core.setFailed(`'${entry.model}' is used more than once with conflicting 'routing'; models.json holds one routing per model, so they must match`);
+              if (modelOverrides[key] && JSON.stringify(modelOverrides[key]) !== JSON.stringify(override)) {
+                core.setFailed(`'${entry.model}' is used more than once with conflicting 'routing'/'max-tokens'; models.json holds one entry per model, so they must match`);
                 return;
               }
-              modelOverrides[key] = { compat: { openRouterRouting: entry.routing } };
+              modelOverrides[key] = override;
             }
             const modelsJson = Object.keys(modelOverrides).length
               ? JSON.stringify({ providers: { openrouter: { modelOverrides } } })
               : '';
 
-            core.setOutput('review-matrix', JSON.stringify(config.review.map(({ routing, ...rest }) => rest)));
+            core.setOutput('review-matrix', JSON.stringify(config.review.map(({ routing, 'max-tokens': _maxTokens, ...rest }) => rest)));
             core.setOutput('judge-model', config.judge.model);
             core.setOutput('judge-thinking', config.judge.thinking || '');
             core.setOutput('judge-label', judgeLabel(config.judge));
