@@ -165,7 +165,7 @@ the following defaults are used:
     { "model": "openai/gpt-5.6-sol", "thinking": "medium", "label": "gpt-5.6-sol" },
     { "model": "anthropic/claude-opus-5", "thinking": "medium", "label": "claude-opus-5" },
     { "model": "openrouter/deepseek/deepseek-v4-flash-0731", "thinking": "xhigh", "label": "deepseek-v4-flash",
-      "routing": { "order": ["deepseek", "baseten"], "allow_fallbacks": false } }
+      "routing": { "order": ["deepseek", "baseten"], "allow_fallbacks": false }, "max-tokens": 384000 }
   ],
   "judge": { "model": "openai/gpt-5.6-sol", "thinking": "medium" }
 }
@@ -174,13 +174,14 @@ the following defaults are used:
 Each review entry requires `model` and `label`. The `thinking` field is optional. The `judge` object requires `model`;
 `thinking` and `label` are optional, with `label` defaulting to the model's last path segment and naming the judge job.
 
-Review and judge entries also accept an optional `routing` object for `openrouter/*` models, sent as-is in the
+Review and judge entries also accept two optional `openrouter/*`-only fields. `routing` is sent as-is in the
 [OpenRouter `provider` field](https://openrouter.ai/docs/guides/routing/provider-selection) to pin which upstream
-providers serve the model:
+providers serve the model, and `max-tokens` caps the completion budget for endpoints that accept less than pi's
+catalog advertises:
 
 ```json
 { "model": "openrouter/z-ai/glm-5.3", "thinking": "max", "label": "glm-5.3",
-  "routing": { "order": ["z-ai", "novita"], "allow_fallbacks": false } }
+  "routing": { "order": ["z-ai", "novita"], "allow_fallbacks": false }, "max-tokens": 384000 }
 ```
 
 ## Event Handling

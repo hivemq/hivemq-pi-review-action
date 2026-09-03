@@ -74,10 +74,33 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
   assert.ok(matrix.every((e) => !('routing' in e)), 'routing must not leak into the matrix');
 
   const overrides = JSON.parse(outputs['models-json']).providers.openrouter.modelOverrides;
-  assert.deepStrictEqual(overrides['deepseek/deepseek-v4-flash-0731'].compat.openRouterRouting, {
-    order: ['deepseek', 'baseten'],
-    allow_fallbacks: false,
+  assert.deepStrictEqual(overrides['deepseek/deepseek-v4-flash-0731'], {
+    compat: { openRouterRouting: { order: ['deepseek', 'baseten'], allow_fallbacks: false } },
+    maxTokens: 384000,
   });
+});
+
+// DeepSeek's own endpoint rejects a completion budget above 384000, but pi's
+// catalog reads maxTokens off the most permissive endpoint. Without the cap the
+// request 400s before any provider serves it.
+test('carries max-tokens into the overlay on its own', () => {
+  const { outputs, failed } = run(JSON.stringify({
+    review: [{ model: 'openrouter/deepseek/deepseek-v4-flash-0731', label: 'ds', 'max-tokens': 384000 }],
+    judge: { model: 'openai/gpt-5.6-sol' },
+  }));
+  assert.strictEqual(failed, null);
+  const overrides = JSON.parse(outputs['models-json']).providers.openrouter.modelOverrides;
+  assert.deepStrictEqual(overrides['deepseek/deepseek-v4-flash-0731'], { maxTokens: 384000 });
+  assert.ok(!('max-tokens' in JSON.parse(outputs['review-matrix'])[0]), 'max-tokens must not leak into the matrix');
+});
+
+test('fails when the same model disagrees on max-tokens', () => {
+  const routing = { order: ['deepseek'] };
+  const { failed } = run(JSON.stringify({
+    review: [{ model: 'openrouter/deepseek/deepseek-v4-flash-0731', label: 'ds', routing, 'max-tokens': 384000 }],
+    judge: { model: 'openrouter/deepseek/deepseek-v4-flash-0731', routing, 'max-tokens': 943718 },
+  }));
+  assert.match(failed ?? '', /conflicting 'routing'\/'max-tokens'/);
 });
 
 test('emits no overlay when no entry sets routing', () => {
@@ -156,5 +179,5 @@ test('fails when routing is set on a non-openrouter model', () => {
     review: [{ model: 'zai/glm-5.3', label: 'glm-5.3', routing: { order: ['z-ai'] } }],
     judge: { model: 'openai/gpt-5.6-sol' },
   }));
-  assert.match(failed ?? '', /routing.*OpenRouter-only.*zai\/glm-5\.3/);
+  assert.match(failed ?? '', /OpenRouter-only.*zai\/glm-5\.3/);
 });
