@@ -63,11 +63,21 @@ const GLM_CONFIG = {
   },
 };
 
-test('emits no overlay when PI_REVIEW_MODELS is unset', () => {
+// The defaults themselves pin OpenRouter routing, so an unset variable has to
+// take the same overlay path as a repo override, not short-circuit past it.
+test('builds the default overlay and a routing-free matrix when unset', () => {
   const { outputs, failed } = run(undefined);
   assert.strictEqual(failed, null);
-  assert.strictEqual(outputs['models-json'], '');
-  assert.strictEqual(JSON.parse(outputs['review-matrix']).length, 3);
+
+  const matrix = JSON.parse(outputs['review-matrix']);
+  assert.strictEqual(matrix.length, 3);
+  assert.ok(matrix.every((e) => !('routing' in e)), 'routing must not leak into the matrix');
+
+  const overrides = JSON.parse(outputs['models-json']).providers.openrouter.modelOverrides;
+  assert.deepStrictEqual(overrides['deepseek/deepseek-v4-flash-0731'].compat.openRouterRouting, {
+    order: ['deepseek', 'baseten'],
+    allow_fallbacks: false,
+  });
 });
 
 test('emits no overlay when no entry sets routing', () => {
