@@ -81,10 +81,10 @@ jobs:
       pr-number: ${{ fromJson(needs.resolve.outputs.pr-number) }}
       post-comment: ${{ fromJson(needs.resolve.outputs.post-comment) }}
     secrets:
-      OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
-      OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
+      PI_OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
+      PI_OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
+      PI_ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
+      PI_DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
       PI_ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
 ```
 
@@ -151,8 +151,6 @@ To opt in, pass `comment-style: inline` in the caller workflow:
 | `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 5)     |
 | `PI_OPENROUTER_API_KEY` | OpenRouter API key (used by DeepSeek v4 Flash and other `openrouter/*` models) |
 | `PI_ZAI_API_KEY`        | Z.AI API key (optional; for `zai/*` models)   |
-
-The legacy un-prefixed names (e.g. `ANTHROPIC_API_KEY`) are still accepted as a fallback during migration.
 
 ## Model Configuration
 
