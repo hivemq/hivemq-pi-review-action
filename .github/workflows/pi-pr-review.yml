@@ -28,9 +28,8 @@ on:
         default: 'v1'
         type: string
     secrets:
-      # Canonical PI_-prefixed secrets. All optional so legacy callers (which
-      # pass the un-prefixed names below) keep working during migration; the
-      # run fails with a clear auth error only if neither name is provided.
+      # All optional: a config only needs the keys its own models use, and a
+      # missing one fails the run with a clear auth error rather than up front.
       PI_OPENAI_API_KEY:
         required: false
       PI_OPENROUTER_API_KEY:
@@ -40,16 +39,6 @@ on:
       PI_DEEPSEEK_API_KEY:
         required: false
       PI_ZAI_API_KEY:
-        required: false
-      # Deprecated legacy aliases — kept for back-compat, remove once all
-      # consumers have migrated to the PI_-prefixed names.
-      OPENAI_API_KEY:
-        required: false
-      OPENROUTER_API_KEY:
-        required: false
-      ANTHROPIC_API_KEY:
-        required: false
-      DEEPSEEK_API_KEY:
         required: false
 
 concurrency:
@@ -294,10 +283,10 @@ jobs:
             "$(cat pi-review-prompt.txt)" \
             | tee pi-review-plan.txt
         env:
-          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY || secrets.DEEPSEEK_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
           ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
@@ -355,10 +344,10 @@ jobs:
             echo "$delim"
           } >> "$GITHUB_OUTPUT"
         env:
-          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY || secrets.DEEPSEEK_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
           ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
@@ -557,10 +546,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
         env:
           PI_REVIEW_OUTPUT: pi-judge-review.json
-          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY || secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY || secrets.DEEPSEEK_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
           ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
           JUDGE_INPUT_FILE: judge-input.md
 
