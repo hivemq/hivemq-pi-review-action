@@ -74,8 +74,18 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
   assert.ok(matrix.every((e) => !('routing' in e)), 'routing must not leak into the matrix');
 
   const overrides = JSON.parse(outputs['models-json']).providers.openrouter.modelOverrides;
+  assert.deepStrictEqual(Object.keys(overrides).sort(), [
+    'anthropic/claude-opus-5',
+    'openai/gpt-5.6-sol',
+    'z-ai/glm-5.3-flash',
+  ]);
   assert.deepStrictEqual(overrides['z-ai/glm-5.3-flash'], {
     compat: { openRouterRouting: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
+  });
+  // Reviewer 1 and the judge are the same model, so the overlay must collapse to
+  // one entry rather than fail the conflict guard.
+  assert.deepStrictEqual(overrides['openai/gpt-5.6-sol'], {
+    compat: { openRouterRouting: { order: ['openai'], allow_fallbacks: false } },
   });
 });
 
