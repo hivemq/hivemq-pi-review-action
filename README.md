@@ -4,7 +4,7 @@ AI-powered pull request reviews using multiple models in parallel, with a judge 
 
 ## Features
 
-- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.6 Sol, Claude Opus 5, DeepSeek v4 Flash)
+- **Multi-model review**: Runs 3 AI models in parallel (GPT-5.6 Sol, Claude Opus 5, GLM 5.3 Flash)
 - **Judge synthesis**: A judge model verifies issues against actual code, deduplicates, and produces a final consensus
   review
 - **PR comment upsert**: Posts/updates a single judge comment on the PR (with `<!-- pi-judge -->` marker)
@@ -162,8 +162,8 @@ the following defaults are used:
   "review": [
     { "model": "openai/gpt-5.6-sol", "thinking": "medium", "label": "gpt-5.6-sol" },
     { "model": "anthropic/claude-opus-5", "thinking": "medium", "label": "claude-opus-5" },
-    { "model": "openrouter/deepseek/deepseek-v4-flash-0731", "thinking": "xhigh", "label": "deepseek-v4-flash",
-      "routing": { "order": ["deepseek", "baseten"], "allow_fallbacks": false }, "max-tokens": 384000 }
+    { "model": "openrouter/z-ai/glm-5.3-flash", "thinking": "max", "label": "glm-5.3-flash",
+      "routing": { "order": ["baseten", "z-ai"], "allow_fallbacks": false } }
   ],
   "judge": { "model": "openai/gpt-5.6-sol", "thinking": "medium" }
 }

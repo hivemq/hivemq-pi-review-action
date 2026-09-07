@@ -74,9 +74,8 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
   assert.ok(matrix.every((e) => !('routing' in e)), 'routing must not leak into the matrix');
 
   const overrides = JSON.parse(outputs['models-json']).providers.openrouter.modelOverrides;
-  assert.deepStrictEqual(overrides['deepseek/deepseek-v4-flash-0731'], {
-    compat: { openRouterRouting: { order: ['deepseek', 'baseten'], allow_fallbacks: false } },
-    maxTokens: 384000,
+  assert.deepStrictEqual(overrides['z-ai/glm-5.3-flash'], {
+    compat: { openRouterRouting: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
   });
 });
 
