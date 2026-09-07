@@ -67,49 +67,23 @@ jobs:
           PI_REVIEW_MODELS: ${{ vars.PI_REVIEW_MODELS }}
         with:
           script: |
+            // `routing` pins the BYOK/first-party endpoint first with one
+            // explicit fallback; `allow_fallbacks: false` closes the list. No
+            // entry needs `max-tokens`: pi's catalog matches every pinned
+            // endpoint here.
             const defaultConfig = {
               review: [
-                {
-                  model: 'openrouter/openai/gpt-5.6-sol',
-                  thinking: 'medium',
-                  label: 'gpt-5.6-sol',
-                  // BYOK is registered on the org OpenRouter account, so OpenAI
-                  // comes first; Azure is an explicit outage fallback. Bedrock is
-                  // left out on purpose, and `allow_fallbacks: false` keeps the
-                  // list closed so nothing escalates past Azure.
-                  routing: { order: ['openai', 'azure'], allow_fallbacks: false },
-                },
-                {
-                  model: 'openrouter/anthropic/claude-opus-5',
-                  thinking: 'medium',
-                  label: 'claude-opus-5',
-                  // Same as above, with Bedrock as the one explicit fallback;
-                  // Vertex and Azure also serve Opus 5 but are deliberately out.
-                  routing: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false },
-                },
-                {
-                  model: 'openrouter/z-ai/glm-5.3-flash',
-                  // `max` is the ceiling on this route; OpenRouter maps GLM's
-                  // max straight through, unlike DeepSeek where it tops out at
-                  // xhigh.
-                  thinking: 'max',
-                  label: 'glm-5.3-flash',
-                  // `baseten` and `z-ai` are the endpoints Z.AI runs or vouches
-                  // for; the rest of OpenRouter's pool is third-party
-                  // requantizations, so pin rather than let it pick.
-                  routing: { order: ['baseten', 'z-ai'], allow_fallbacks: false },
-                  // No `max-tokens` here: unlike DeepSeek, GLM's model-level
-                  // max_completion_tokens (131072) already matches both pinned
-                  // endpoints, so pi's catalog needs no correction.
-                },
+                { model: 'openrouter/openai/gpt-5.6-sol', thinking: 'medium', label: 'gpt-5.6-sol',
+                  routing: { order: ['openai', 'azure'], allow_fallbacks: false } },
+                { model: 'openrouter/anthropic/claude-opus-5', thinking: 'medium', label: 'claude-opus-5',
+                  routing: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false } },
+                // `max` is GLM's ceiling on this route; it has no `xhigh`.
+                { model: 'openrouter/z-ai/glm-5.3-flash', thinking: 'max', label: 'glm-5.3-flash',
+                  routing: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
               ],
-              judge: {
-                model: 'openrouter/openai/gpt-5.6-sol',
-                thinking: 'medium',
-                // Must match reviewer 1 exactly: models.json holds one entry per
-                // model, and the parser fails on a conflict rather than guessing.
-                routing: { order: ['openai', 'azure'], allow_fallbacks: false },
-              },
+              // Routing must match reviewer 1: models.json holds one entry per model.
+              judge: { model: 'openrouter/openai/gpt-5.6-sol', thinking: 'medium',
+                routing: { order: ['openai', 'azure'], allow_fallbacks: false } },
             };
 
             // The judge has no required label, so name it after the model's last
