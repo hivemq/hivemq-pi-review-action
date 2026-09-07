@@ -161,14 +161,14 @@ the following defaults are used:
 {
   "review": [
     { "model": "openrouter/openai/gpt-5.6-sol", "thinking": "medium", "label": "gpt-5.6-sol",
-      "routing": { "order": ["openai"], "allow_fallbacks": false } },
+      "routing": { "order": ["openai", "azure"], "allow_fallbacks": false } },
     { "model": "openrouter/anthropic/claude-opus-5", "thinking": "medium", "label": "claude-opus-5",
-      "routing": { "order": ["anthropic"], "allow_fallbacks": false } },
+      "routing": { "order": ["anthropic", "amazon-bedrock"], "allow_fallbacks": false } },
     { "model": "openrouter/z-ai/glm-5.3-flash", "thinking": "max", "label": "glm-5.3-flash",
       "routing": { "order": ["baseten", "z-ai"], "allow_fallbacks": false } }
   ],
   "judge": { "model": "openrouter/openai/gpt-5.6-sol", "thinking": "medium",
-    "routing": { "order": ["openai"], "allow_fallbacks": false } }
+    "routing": { "order": ["openai", "azure"], "allow_fallbacks": false } }
 }
 ```
 

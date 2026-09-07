@@ -85,7 +85,7 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
   // Reviewer 1 and the judge are the same model, so the overlay must collapse to
   // one entry rather than fail the conflict guard.
   assert.deepStrictEqual(overrides['openai/gpt-5.6-sol'], {
-    compat: { openRouterRouting: { order: ['openai'], allow_fallbacks: false } },
+    compat: { openRouterRouting: { order: ['openai', 'azure'], allow_fallbacks: false } },
   });
 });
 
