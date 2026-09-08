@@ -75,8 +75,14 @@ jobs:
               review: [
                 { model: 'openrouter/openai/gpt-5.6-sol', thinking: 'medium', label: 'gpt-5.6-sol',
                   routing: { order: ['openai', 'azure'], allow_fallbacks: false } },
+                // pi's catalog marks this model `supportsMidConvoEffort`, so it sends
+                // system `output_config` + `thinking.block_binding`. OpenRouter's
+                // Anthropic endpoints reject both, 400ing every request; clearing the
+                // flag drops them. Model-specific: fable-5.1 on the same route is fine.
+                // https://github.com/earendil-works/pi/issues/9165
                 { model: 'openrouter/anthropic/claude-opus-5', thinking: 'medium', label: 'claude-opus-5',
-                  routing: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false } },
+                  routing: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false },
+                  compat: { supportsMidConvoEffort: false } },
                 // `max` is GLM's ceiling on this route; it has no `xhigh`.
                 { model: 'openrouter/z-ai/glm-5.3-flash', thinking: 'max', label: 'glm-5.3-flash',
                   routing: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
@@ -126,19 +132,21 @@ jobs:
               return;
             }
 
-            // `routing` pins OpenRouter provider selection and `max-tokens` caps the
-            // completion budget. pi only reads either from models.json, so collect
-            // them here into an overlay the review and judge jobs drop at
-            // ~/.pi/agent/models.json.
+            // `routing` pins OpenRouter provider selection, `max-tokens` caps the
+            // completion budget, and `compat` passes pi model-compat flags straight
+            // through. pi only reads these from models.json, so collect them here into
+            // an overlay the review and judge jobs drop at ~/.pi/agent/models.json.
             const modelOverrides = {};
             for (const entry of [...config.review, config.judge]) {
-              if (!entry.routing && entry['max-tokens'] === undefined) continue;
+              if (!entry.routing && entry['max-tokens'] === undefined && !entry.compat) continue;
               if (!entry.model.startsWith('openrouter/')) {
-                core.setFailed(`'routing' and 'max-tokens' are OpenRouter-only, but '${entry.model}' is not an openrouter/* model`);
+                core.setFailed(`'routing', 'max-tokens' and 'compat' are OpenRouter-only, but '${entry.model}' is not an openrouter/* model`);
                 return;
               }
               const override = {};
-              if (entry.routing) override.compat = { openRouterRouting: entry.routing };
+              if (entry.routing || entry.compat) {
+                override.compat = { ...entry.compat, ...(entry.routing ? { openRouterRouting: entry.routing } : {}) };
+              }
               if (entry['max-tokens'] !== undefined) override.maxTokens = entry['max-tokens'];
 
               // models.json is keyed by model, so the same model used twice (say as
@@ -146,7 +154,7 @@ jobs:
               // win would discard the other's settings, so demand they agree.
               const key = entry.model.slice('openrouter/'.length);
               if (modelOverrides[key] && JSON.stringify(modelOverrides[key]) !== JSON.stringify(override)) {
-                core.setFailed(`'${entry.model}' is used more than once with conflicting 'routing'/'max-tokens'; models.json holds one entry per model, so they must match`);
+                core.setFailed(`'${entry.model}' is used more than once with conflicting 'routing'/'max-tokens'/'compat'; models.json holds one entry per model, so they must match`);
                 return;
               }
               modelOverrides[key] = override;
@@ -155,7 +163,7 @@ jobs:
               ? JSON.stringify({ providers: { openrouter: { modelOverrides } } })
               : '';
 
-            core.setOutput('review-matrix', JSON.stringify(config.review.map(({ routing, 'max-tokens': _maxTokens, ...rest }) => rest)));
+            core.setOutput('review-matrix', JSON.stringify(config.review.map(({ routing, 'max-tokens': _maxTokens, compat: _compat, ...rest }) => rest)));
             core.setOutput('judge-model', config.judge.model);
             core.setOutput('judge-thinking', config.judge.thinking || '');
             core.setOutput('judge-label', judgeLabel(config.judge));
