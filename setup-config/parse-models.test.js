@@ -79,6 +79,14 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
     'openai/gpt-5.6-sol',
     'z-ai/glm-5.3-flash',
   ]);
+  // Without this flag pi sends output_config + thinking.block_binding, which
+  // OpenRouter's Anthropic endpoints 400 on. See earendil-works/pi#9165.
+  assert.deepStrictEqual(overrides['anthropic/claude-opus-5'], {
+    compat: {
+      supportsMidConvoEffort: false,
+      openRouterRouting: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false },
+    },
+  });
   assert.deepStrictEqual(overrides['z-ai/glm-5.3-flash'], {
     compat: { openRouterRouting: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
   });
@@ -87,6 +95,33 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
   assert.deepStrictEqual(overrides['openai/gpt-5.6-sol'], {
     compat: { openRouterRouting: { order: ['openai', 'azure'], allow_fallbacks: false } },
   });
+});
+
+test('passes compat through on its own and merges it with routing', () => {
+  const { outputs, failed } = run(JSON.stringify({
+    review: [
+      { model: 'openrouter/anthropic/claude-opus-5', label: 'opus', compat: { supportsMidConvoEffort: false } },
+      { model: 'openrouter/z-ai/glm-5.3-flash', label: 'glm', compat: { supportsStore: true }, routing: { order: ['baseten'] } },
+    ],
+    judge: { model: 'openai/gpt-5.6-sol' },
+  }));
+  assert.strictEqual(failed, null);
+  const overrides = JSON.parse(outputs['models-json']).providers.openrouter.modelOverrides;
+  assert.deepStrictEqual(overrides['anthropic/claude-opus-5'], {
+    compat: { supportsMidConvoEffort: false },
+  });
+  assert.deepStrictEqual(overrides['z-ai/glm-5.3-flash'], {
+    compat: { supportsStore: true, openRouterRouting: { order: ['baseten'] } },
+  });
+  assert.ok(!('compat' in JSON.parse(outputs['review-matrix'])[0]), 'compat must not leak into the matrix');
+});
+
+test('fails when compat is set on a non-openrouter model', () => {
+  const { failed } = run(JSON.stringify({
+    review: [{ model: 'anthropic/claude-opus-5', label: 'opus', compat: { supportsMidConvoEffort: false } }],
+    judge: { model: 'openai/gpt-5.6-sol' },
+  }));
+  assert.match(failed ?? '', /OpenRouter-only.*anthropic\/claude-opus-5/);
 });
 
 // DeepSeek's own endpoint rejects a completion budget above 384000, but pi's
