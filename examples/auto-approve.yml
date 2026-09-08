@@ -1,0 +1,47 @@
+# Per-repo AI auto-approve policy — copy to .github/auto-approve.yml in a
+# consuming repo. Read from the PR's BASE ref, so a PR cannot weaken its own gate.
+version: 1
+
+# Master switch. With this false (or the file absent) the gate is a no-op.
+enabled: false
+
+# shadow  — evaluate and log the verdict, act on nothing (start here).
+# enforce — additionally apply `human_label` when a PR must go to a human.
+mode: shadow
+
+# Label applied to PRs the gate sends to a human (enforce mode only).
+# NOTE: deliberately NOT `manual-review` — that label re-triggers a Pi review.
+human_label: human-review-required
+
+# ALL of these must hold for a PR to be auto-approve eligible.
+require:
+  checks_pass: true
+  # Every changed file must be owned (via CODEOWNERS) by one of these teams.
+  # Accepts a bare slug or the full @org/team form.
+  owner_teams:
+    - hivemq-team-platform
+
+# Allowlist. A PR is eligible for auto-approve ONLY if EVERY changed file
+# matches one of these globs; anything unlisted routes to a human. Fail-safe by
+# design — a newly-added sensitive dir defaults to human review until someone
+# deliberately allows it, so this list should stay short and trusted (no infra,
+# CI, secrets, or IaC here). Globs: `*` = one segment, `**` = any depth.
+#
+# Tune per repo. This default trusts application source, docs, and tests — the
+# set the AI reviewer is expected to judge — and nothing operationally risky.
+auto_approve_paths:
+  - "crates/**"          # application/library source (repo-specific)
+  - "src/**"
+  - "tests/**"
+  - "**/*.md"
+  - "docs/**"
+
+# Heuristic scan of the PR title, body, and diff for prompt-injection attempts.
+# A hit forces a human review.
+prompt_injection_guard:
+  enabled: true
+
+# Stage 2 (approver) consumes these once built (PLT-1520).
+approver:
+  min_confidence: high
+  require_no_open_issues: true
