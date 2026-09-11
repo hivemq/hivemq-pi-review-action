@@ -225,3 +225,71 @@ test('fails when routing is set on a non-openrouter model', () => {
   }));
   assert.match(failed ?? '', /OpenRouter-only.*zai\/glm-5\.3/);
 });
+
+// pi's modelOverrides only patch models already in its catalog, so for a model
+// it has never seen they are dropped without a word and the model resolves
+// against the provider default's metadata — wrong context window, wrong routing.
+// A `models` entry upserts, which is why `define` emits one instead.
+test('define emits a full models entry instead of an override', () => {
+  const { outputs, failed } = run(JSON.stringify({
+    review: [{
+      model: 'openrouter/deepseek/deepseek-v4.1-flash',
+      label: 'ds41',
+      thinking: 'xhigh',
+      routing: { order: ['deepseek', 'novita'], allow_fallbacks: false },
+      'max-tokens': 384000,
+      define: {
+        reasoning: true,
+        contextWindow: 1048576,
+        thinkingLevelMap: { off: 'none', high: 'high', xhigh: 'xhigh' },
+        compat: { thinkingFormat: 'openrouter' },
+      },
+    }],
+    judge: { model: 'openai/gpt-5.6-sol' },
+  }));
+  assert.strictEqual(failed, null);
+  const openrouter = JSON.parse(outputs['models-json']).providers.openrouter;
+  assert.ok(!openrouter.modelOverrides, 'a defined model must not also emit an override');
+  assert.deepStrictEqual(openrouter.models, [{
+    id: 'deepseek/deepseek-v4.1-flash',
+    reasoning: true,
+    contextWindow: 1048576,
+    thinkingLevelMap: { off: 'none', high: 'high', xhigh: 'xhigh' },
+    compat: {
+      thinkingFormat: 'openrouter',
+      openRouterRouting: { order: ['deepseek', 'novita'], allow_fallbacks: false },
+    },
+    maxTokens: 384000,
+  }]);
+  assert.ok(!('define' in JSON.parse(outputs['review-matrix'])[0]), 'define must not leak into the matrix');
+});
+
+test('defined and catalog models coexist in one overlay', () => {
+  const { outputs, failed } = run(JSON.stringify({
+    review: [
+      { model: 'openrouter/deepseek/deepseek-v4.1-flash', label: 'ds41', define: { reasoning: true } },
+      { model: 'openrouter/z-ai/glm-5.3-flash', label: 'glm', routing: { order: ['baseten'] } },
+    ],
+    judge: { model: 'openai/gpt-5.6-sol' },
+  }));
+  assert.strictEqual(failed, null);
+  const openrouter = JSON.parse(outputs['models-json']).providers.openrouter;
+  assert.deepStrictEqual(openrouter.models, [{ id: 'deepseek/deepseek-v4.1-flash', reasoning: true }]);
+  assert.deepStrictEqual(Object.keys(openrouter.modelOverrides), ['z-ai/glm-5.3-flash']);
+});
+
+test('fails when define is set on a non-openrouter model', () => {
+  const { failed } = run(JSON.stringify({
+    review: [{ model: 'openai/gpt-5.6-sol', label: 'sol', define: { reasoning: true } }],
+    judge: { model: 'openai/gpt-5.6-sol' },
+  }));
+  assert.match(failed ?? '', /OpenRouter-only/);
+});
+
+test('fails when the same model disagrees on define', () => {
+  const { failed } = run(JSON.stringify({
+    review: [{ model: 'openrouter/deepseek/deepseek-v4.1-flash', label: 'ds41', define: { contextWindow: 1048576 } }],
+    judge: { model: 'openrouter/deepseek/deepseek-v4.1-flash', define: { contextWindow: 262144 } },
+  }));
+  assert.match(failed ?? '', /conflicting/);
+});

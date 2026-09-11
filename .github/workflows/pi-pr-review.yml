@@ -134,36 +134,63 @@ jobs:
 
             // `routing` pins OpenRouter provider selection, `max-tokens` caps the
             // completion budget, and `compat` passes pi model-compat flags straight
-            // through. pi only reads these from models.json, so collect them here into
-            // an overlay the review and judge jobs drop at ~/.pi/agent/models.json.
-            const modelOverrides = {};
+            // through. `define` supplies a full model definition for a model pi's
+            // catalog does not carry: pi's `modelOverrides` only patch models that
+            // already exist, so for a brand-new model id they are silently dropped
+            // and it resolves against the provider default's metadata instead. A
+            // `models` entry upserts, so it is the only way to describe one.
+            // pi reads all of this from models.json, so collect it here into an
+            // overlay the review and judge jobs drop at ~/.pi/agent/models.json.
+            const entries = {};
             for (const entry of [...config.review, config.judge]) {
-              if (!entry.routing && entry['max-tokens'] === undefined && !entry.compat) continue;
+              if (!entry.routing && entry['max-tokens'] === undefined && !entry.compat && !entry.define) continue;
               if (!entry.model.startsWith('openrouter/')) {
-                core.setFailed(`'routing', 'max-tokens' and 'compat' are OpenRouter-only, but '${entry.model}' is not an openrouter/* model`);
+                core.setFailed(`'routing', 'max-tokens', 'compat' and 'define' are OpenRouter-only, but '${entry.model}' is not an openrouter/* model`);
                 return;
               }
-              const override = {};
-              if (entry.routing || entry.compat) {
-                override.compat = { ...entry.compat, ...(entry.routing ? { openRouterRouting: entry.routing } : {}) };
+              const key = entry.model.slice('openrouter/'.length);
+              const settings = {};
+              if (entry.routing || entry.compat || entry.define?.compat) {
+                settings.compat = {
+                  ...entry.define?.compat,
+                  ...entry.compat,
+                  ...(entry.routing ? { openRouterRouting: entry.routing } : {}),
+                };
               }
-              if (entry['max-tokens'] !== undefined) override.maxTokens = entry['max-tokens'];
+              if (entry['max-tokens'] !== undefined) settings.maxTokens = entry['max-tokens'];
+
+              let value;
+              if (entry.define) {
+                const { compat: _defineCompat, ...rest } = entry.define;
+                value = { kind: 'model', spec: { id: key, ...rest, ...settings } };
+              } else {
+                value = { kind: 'override', spec: settings };
+              }
 
               // models.json is keyed by model, so the same model used twice (say as
               // reviewer and judge) shares one entry. Silently letting the last one
               // win would discard the other's settings, so demand they agree.
-              const key = entry.model.slice('openrouter/'.length);
-              if (modelOverrides[key] && JSON.stringify(modelOverrides[key]) !== JSON.stringify(override)) {
-                core.setFailed(`'${entry.model}' is used more than once with conflicting 'routing'/'max-tokens'/'compat'; models.json holds one entry per model, so they must match`);
+              if (entries[key] && JSON.stringify(entries[key]) !== JSON.stringify(value)) {
+                core.setFailed(`'${entry.model}' is used more than once with conflicting 'routing'/'max-tokens'/'compat'/'define'; models.json holds one entry per model, so they must match`);
                 return;
               }
-              modelOverrides[key] = override;
+              entries[key] = value;
             }
-            const modelsJson = Object.keys(modelOverrides).length
-              ? JSON.stringify({ providers: { openrouter: { modelOverrides } } })
+
+            const models = [];
+            const modelOverrides = {};
+            for (const [key, { kind, spec }] of Object.entries(entries)) {
+              if (kind === 'model') models.push(spec);
+              else modelOverrides[key] = spec;
+            }
+            const openrouter = {};
+            if (models.length) openrouter.models = models;
+            if (Object.keys(modelOverrides).length) openrouter.modelOverrides = modelOverrides;
+            const modelsJson = Object.keys(openrouter).length
+              ? JSON.stringify({ providers: { openrouter } })
               : '';
 
-            core.setOutput('review-matrix', JSON.stringify(config.review.map(({ routing, 'max-tokens': _maxTokens, compat: _compat, ...rest }) => rest)));
+            core.setOutput('review-matrix', JSON.stringify(config.review.map(({ routing, 'max-tokens': _maxTokens, compat: _compat, define: _define, ...rest }) => rest)));
             core.setOutput('judge-model', config.judge.model);
             core.setOutput('judge-thinking', config.judge.thinking || '');
             core.setOutput('judge-label', judgeLabel(config.judge));
@@ -173,6 +200,9 @@ jobs:
     name: "Pi Review (${{ matrix.label }})"
     needs: [setup]
     runs-on: "${{ inputs.runner-label }}"
+    # A wedged `pi` call otherwise holds a self-hosted runner until GitHub's
+    # 6-hour default.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -417,6 +447,7 @@ jobs:
     needs: [setup, pi_review]
     if: ${{ !cancelled() && needs.pi_review.result != 'skipped' }}
     runs-on: "${{ inputs.runner-label }}"
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: write
