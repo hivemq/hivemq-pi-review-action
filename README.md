@@ -176,7 +176,7 @@ the following defaults are used:
 Each review entry requires `model` and `label`. The `thinking` field is optional. The `judge` object requires `model`;
 `thinking` and `label` are optional, with `label` defaulting to the model's last path segment and naming the judge job.
 
-Review and judge entries also accept three optional `openrouter/*`-only fields. `compat` is merged into the model's
+Review and judge entries also accept four optional `openrouter/*`-only fields. `compat` is merged into the model's
 pi compat block, for working around provider quirks (the default config clears `supportsMidConvoEffort` on Opus 5,
 which OpenRouter's Anthropic endpoints reject). `routing` is sent as-is in the
 [OpenRouter `provider` field](https://openrouter.ai/docs/guides/routing/provider-selection) to pin which upstream
@@ -186,6 +186,19 @@ catalog advertises:
 ```json
 { "model": "openrouter/z-ai/glm-5.3", "thinking": "max", "label": "glm-5.3",
   "routing": { "order": ["z-ai", "novita"], "allow_fallbacks": false }, "max-tokens": 384000 }
+```
+
+`define` describes a model pi's catalog does not carry yet, such as one released after the installed pi version. The
+other three fields patch an existing catalog entry, and pi drops such a patch for an unknown model without warning,
+resolving it against the provider default's metadata instead — wrong context window, and no routing. `define` instead
+supplies the catalog fields itself (`reasoning`, `thinkingLevelMap`, `contextWindow`, `cost`, ...); `api` and `baseUrl`
+are inherited from OpenRouter's other models. `routing`, `max-tokens` and `compat` still apply on top:
+
+```json
+{ "model": "openrouter/deepseek/deepseek-v4.1-flash", "thinking": "xhigh", "label": "deepseek-v4.1-flash",
+  "routing": { "order": ["deepseek", "novita"], "allow_fallbacks": false }, "max-tokens": 384000,
+  "define": { "reasoning": true, "contextWindow": 1048576,
+    "thinkingLevelMap": { "off": "none", "high": "high", "xhigh": "xhigh" } } }
 ```
 
 ## Event Handling
