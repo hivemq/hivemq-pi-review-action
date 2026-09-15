@@ -394,6 +394,11 @@ jobs:
           PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
           REVIEW_PLAN_FILE: pi-review-plan.txt
 
+      - name: Validate review output
+        env:
+          MATRIX_LABEL: ${{ matrix.label }}
+        run: node .pi-review-action/judge-input/assemble.js validate pi-output.md "$MATRIX_LABEL"
+
       - name: Publish Pi result to run summary
         if: ${{ steps.run_pi.outputs.final-message != '' }}
         env:
@@ -515,17 +520,11 @@ jobs:
           path: reviews
 
       - name: Assemble judge input
-        run: |
-          : > judge-input.md
-          shopt -s nullglob
-          for dir in reviews/pi-pr-review-*; do
-            label="$(basename "$dir" | sed "s/^pi-pr-review-//; s/-${{ inputs.pr-number }}-${{ github.run_id }}$//")"
-            if [ -f "$dir/pi-output.md" ]; then
-              printf '\n---\n\n## Review: %s\n\n' "$label" >> judge-input.md
-              cat "$dir/pi-output.md" >> judge-input.md
-            fi
-          done
-          echo "=== Judge input: $(wc -c < judge-input.md) bytes ==="
+        env:
+          REVIEW_MATRIX: ${{ needs.setup.outputs.review-matrix }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          RUN_ID: ${{ github.run_id }}
+        run: node .pi-review-action/judge-input/assemble.js assemble
 
       - name: Validate judge input
         id: validate_judge
