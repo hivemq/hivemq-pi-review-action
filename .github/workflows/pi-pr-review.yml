@@ -59,6 +59,7 @@ jobs:
       judge-thinking: ${{ steps.parse.outputs.judge-thinking }}
       judge-label: ${{ steps.parse.outputs.judge-label }}
       models-json: ${{ steps.parse.outputs.models-json }}
+      merge-ref-available: ${{ steps.merge_ref.outputs.available }}
     steps:
       - name: Parse model config
         id: parse
@@ -196,9 +197,34 @@ jobs:
             core.setOutput('judge-label', judgeLabel(config.judge));
             core.setOutput('models-json', modelsJson);
 
+      - name: Resolve merge ref
+        id: merge_ref
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ inputs.pr-number }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const number = Number(process.env.PR_NUMBER);
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `pull/${number}/merge`,
+              });
+              core.setOutput('available', 'true');
+            } catch (e) {
+              if (e.status === 404) {
+                core.setOutput('available', 'false');
+              } else {
+                throw e;
+              }
+            }
+
   pi_review:
     name: "Pi Review (${{ matrix.label }})"
     needs: [setup]
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.merge-ref-available == 'true' }}
     runs-on: "${{ inputs.runner-label }}"
     # A wedged `pi` call otherwise holds a self-hosted runner until GitHub's
     # 6-hour default.
@@ -212,8 +238,38 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      - name: Re-check merge ref
+        id: merge_probe
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ inputs.pr-number }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const number = Number(process.env.PR_NUMBER);
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `pull/${number}/merge`,
+              });
+              core.setOutput('available', 'true');
+            } catch (e) {
+              if (e.status === 404) {
+                core.setOutput('available', 'false');
+              } else {
+                throw e;
+              }
+            }
+
+      - name: Report merge race
+        if: steps.merge_probe.outputs.available == 'false'
+        run: |
+          echo "pull request already merged during runner queue wait; skipping the review for ${{ matrix.label }}." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Resolve PR context
         id: pr_context
+        if: steps.merge_probe.outputs.available != 'false'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           github-token: ${{ github.token }}
@@ -235,17 +291,20 @@ jobs:
             core.setOutput('head_sha', pr.head.sha);
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.merge_probe.outputs.available != 'false'
         with:
           ref: refs/pull/${{ steps.pr_context.outputs.number }}/merge
           fetch-depth: 0
 
       - name: Pre-fetch base and head refs
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           git fetch --no-tags origin \
             ${{ steps.pr_context.outputs.base_ref }} \
             +refs/pull/${{ steps.pr_context.outputs.number }}/head
 
       - name: Checkout action repo
+        if: steps.merge_probe.outputs.available != 'false'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: hivemq/hivemq-pi-review-action
@@ -254,6 +313,7 @@ jobs:
 
       - name: Ensure Node.js and Pi agent
         id: deps
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           if ! node --version 2>/dev/null | grep -q '^v24\.'; then
             echo "Node 24 not found, installing via setup-node..."
@@ -262,13 +322,13 @@ jobs:
           command -v pi || echo "need_pi=true" >> "$GITHUB_OUTPUT"
 
       - name: Install Node.js
-        if: steps.deps.outputs.need_node == 'true'
+        if: steps.merge_probe.outputs.available != 'false' && steps.deps.outputs.need_node == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
 
       - name: Install Pi coding agent
-        if: steps.deps.outputs.need_pi == 'true'
+        if: steps.merge_probe.outputs.available != 'false' && steps.deps.outputs.need_pi == 'true'
         run: |
           # Install outside the consumer checkout. Run from here, npm adopts the
           # caller's package.json as the project manifest and resolves their whole
@@ -282,7 +342,7 @@ jobs:
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Apply model routing overrides
-        if: needs.setup.outputs.models-json != ''
+        if: steps.merge_probe.outputs.available != 'false' && needs.setup.outputs.models-json != ''
         env:
           PI_MODELS_JSON: ${{ needs.setup.outputs.models-json }}
         run: |
@@ -291,15 +351,19 @@ jobs:
           cat "$HOME/.pi/agent/models.json"
 
       - name: Set up Homebrew (for yq)
+        if: steps.merge_probe.outputs.available != 'false'
         uses: Homebrew/actions/setup-homebrew@49d03f1bf5d455a413dfbdf99e6718054a4cd975 # master
 
       - name: Install yq
+        if: steps.merge_probe.outputs.available != 'false'
         run: brew install yq
 
       - name: Print Pi version
+        if: steps.merge_probe.outputs.available != 'false'
         run: pi --version
 
       - name: Compute PR file list
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           git diff --name-status "$PR_BASE_SHA...$PR_HEAD_SHA" | tee pr-changed-files.txt
         env:
@@ -308,6 +372,7 @@ jobs:
 
       - name: Generate Pi review plan
         id: generate_plan
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           set -o pipefail
           {
@@ -334,6 +399,7 @@ jobs:
           REVIEW_PLAN_FILE: pi-review-plan.txt
 
       - name: Validate review plan output
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           if [ ! -s "pi-review-plan.txt" ] || ! grep -q '[^[:space:]]' pi-review-plan.txt; then
             echo "pi-review-plan.txt is missing or whitespace-only; failing fast."
@@ -341,12 +407,14 @@ jobs:
           fi
 
       - name: Print review plan
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           echo "Full Pi review plan (${{ matrix.label }}):"
           cat pi-review-plan.txt
 
       - name: Assemble reviewer prompt (appends .github/PI.yaml .reviewer)
         id: reviewer_prompt
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           prompt_file="pi-review-prompt-assembled.txt"
           cp .pi-review-action/prompts/review.md "$prompt_file"
@@ -365,6 +433,7 @@ jobs:
 
       - name: Run Pi review
         id: run_pi
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           set -o pipefail
           pi -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
@@ -395,12 +464,13 @@ jobs:
           REVIEW_PLAN_FILE: pi-review-plan.txt
 
       - name: Validate review output
+        if: steps.merge_probe.outputs.available != 'false'
         env:
           MATRIX_LABEL: ${{ matrix.label }}
         run: node .pi-review-action/judge-input/assemble.js validate pi-output.md "$MATRIX_LABEL"
 
       - name: Publish Pi result to run summary
-        if: ${{ steps.run_pi.outputs.final-message != '' }}
+        if: ${{ steps.merge_probe.outputs.available != 'false' && steps.run_pi.outputs.final-message != '' }}
         env:
           PI_FINAL_MESSAGE: ${{ steps.run_pi.outputs.final-message }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
@@ -450,7 +520,7 @@ jobs:
   pi_judge:
     name: "Pi Judge (${{ needs.setup.outputs.judge-label }})"
     needs: [setup, pi_review]
-    if: ${{ !cancelled() && needs.pi_review.result != 'skipped' }}
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.merge-ref-available == 'true' && needs.pi_review.result != 'skipped' }}
     runs-on: "${{ inputs.runner-label }}"
     timeout-minutes: 60
     permissions:
@@ -458,12 +528,43 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      - name: Re-check merge ref
+        id: merge_probe
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ inputs.pr-number }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const number = Number(process.env.PR_NUMBER);
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `pull/${number}/merge`,
+              });
+              core.setOutput('available', 'true');
+            } catch (e) {
+              if (e.status === 404) {
+                core.setOutput('available', 'false');
+              } else {
+                throw e;
+              }
+            }
+
+      - name: Report merge race
+        if: steps.merge_probe.outputs.available == 'false'
+        run: |
+          echo "pull request already merged during runner queue wait; skipping the judge." >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.merge_probe.outputs.available != 'false'
         with:
           ref: refs/pull/${{ inputs.pr-number }}/merge
           fetch-depth: 1
 
       - name: Checkout action repo
+        if: steps.merge_probe.outputs.available != 'false'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: hivemq/hivemq-pi-review-action
@@ -472,6 +573,7 @@ jobs:
 
       - name: Ensure Node.js and Pi agent
         id: deps
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           if ! node --version 2>/dev/null | grep -q '^v24\.'; then
             echo "need_node=true" >> "$GITHUB_OUTPUT"
@@ -479,13 +581,13 @@ jobs:
           command -v pi || echo "need_pi=true" >> "$GITHUB_OUTPUT"
 
       - name: Install Node.js
-        if: steps.deps.outputs.need_node == 'true'
+        if: steps.merge_probe.outputs.available != 'false' && steps.deps.outputs.need_node == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
 
       - name: Install Pi coding agent
-        if: steps.deps.outputs.need_pi == 'true'
+        if: steps.merge_probe.outputs.available != 'false' && steps.deps.outputs.need_pi == 'true'
         run: |
           # Install outside the consumer checkout — see the review job above.
           pi_home="$RUNNER_TEMP/pi-agent"
@@ -496,7 +598,7 @@ jobs:
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Apply model routing overrides
-        if: needs.setup.outputs.models-json != ''
+        if: steps.merge_probe.outputs.available != 'false' && needs.setup.outputs.models-json != ''
         env:
           PI_MODELS_JSON: ${{ needs.setup.outputs.models-json }}
         run: |
@@ -505,21 +607,26 @@ jobs:
           cat "$HOME/.pi/agent/models.json"
 
       - name: Set up Homebrew (for yq)
+        if: steps.merge_probe.outputs.available != 'false'
         uses: Homebrew/actions/setup-homebrew@49d03f1bf5d455a413dfbdf99e6718054a4cd975 # master
 
       - name: Install yq
+        if: steps.merge_probe.outputs.available != 'false'
         run: brew install yq
 
       - name: Print Pi version
+        if: steps.merge_probe.outputs.available != 'false'
         run: pi --version
 
       - name: Download all review artifacts
+        if: steps.merge_probe.outputs.available != 'false'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: pi-pr-review-*-${{ inputs.pr-number }}-${{ github.run_id }}
           path: reviews
 
       - name: Assemble judge input
+        if: steps.merge_probe.outputs.available != 'false'
         env:
           REVIEW_MATRIX: ${{ needs.setup.outputs.review-matrix }}
           PR_NUMBER: ${{ inputs.pr-number }}
@@ -528,6 +635,7 @@ jobs:
 
       - name: Validate judge input
         id: validate_judge
+        if: steps.merge_probe.outputs.available != 'false'
         run: |
           if [ ! -s judge-input.md ] || ! grep -q '[^[:space:]]' judge-input.md; then
             echo "judge-input.md is missing or empty; skipping judge."
@@ -536,7 +644,7 @@ jobs:
 
       - name: Assemble judge prompt (appends .github/PI.yaml .judge)
         id: judge_prompt
-        if: steps.validate_judge.outputs.skip != 'true'
+        if: steps.merge_probe.outputs.available != 'false' && steps.validate_judge.outputs.skip != 'true'
         run: |
           prompt_file="pi-judge-prompt-assembled.txt"
           cp .pi-review-action/prompts/judge.md "$prompt_file"
@@ -555,7 +663,7 @@ jobs:
 
       - name: Run Pi Judge
         id: run_judge
-        if: steps.validate_judge.outputs.skip != 'true'
+        if: steps.merge_probe.outputs.available != 'false' && steps.validate_judge.outputs.skip != 'true'
         run: |
           set -o pipefail
           # The judge returns its review by calling the submit_review tool, which
@@ -590,7 +698,7 @@ jobs:
           JUDGE_INPUT_FILE: judge-input.md
 
       - name: Publish judge result to run summary
-        if: ${{ steps.run_judge.outputs.final-message != '' }}
+        if: ${{ steps.merge_probe.outputs.available != 'false' && steps.run_judge.outputs.final-message != '' }}
         env:
           PI_FINAL_MESSAGE: ${{ steps.run_judge.outputs.final-message }}
           PR_NUMBER: ${{ inputs.pr-number }}
@@ -604,7 +712,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post inline review
-        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style == 'inline' }}
+        if: ${{ steps.merge_probe.outputs.available != 'false' && steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style == 'inline' }}
         uses: ./.pi-review-action/post-inline-review
         with:
           review-json: pi-judge-review.json
@@ -612,7 +720,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Upsert judge comment
-        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style != 'inline' }}
+        if: ${{ steps.merge_probe.outputs.available != 'false' && steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style != 'inline' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           PI_FINAL_MESSAGE: ${{ steps.run_judge.outputs.final-message }}
