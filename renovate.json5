@@ -11,4 +11,14 @@
     addLabels: [
         'engineering-platform-team',
     ],
+    // pi is installed inline by the workflow; pinned so an upstream catalog
+    // change reaches consumers only through a tested PR.
+    customManagers: [
+        {
+            customType: 'regex',
+            managerFilePatterns: ['/^\\.github/workflows/pi-pr-review\\.yml$/'],
+            matchStrings: ['npm install (?<depName>@earendil-works/pi-coding-agent)@(?<currentValue>[0-9.]+)'],
+            datasourceTemplate: 'npm',
+        },
+    ],
 }
