@@ -84,6 +84,7 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
   });
   assert.deepStrictEqual(overrides['z-ai/glm-5.3-flash'], {
     compat: { openRouterRouting: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
+    maxTokens: 131072,
   });
   // Reviewer 1 and the judge are the same model, so the overlay must collapse to
   // one entry rather than fail the conflict guard.

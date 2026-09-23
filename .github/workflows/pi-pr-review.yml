@@ -77,9 +77,11 @@ jobs:
                   routing: { order: ['openai', 'azure'], allow_fallbacks: false } },
                 { model: 'openrouter/anthropic/claude-opus-5.5', thinking: 'medium', label: 'claude-opus-5.5',
                   routing: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false } },
-                // `max` is GLM's ceiling on this route; it has no `xhigh`.
+                // `max` is GLM's ceiling on this route; it has no `xhigh`. pi's catalog
+                // asks for 943718 output tokens, above both providers' 131072 cap, so
+                // OpenRouter filters them out and 404s.
                 { model: 'openrouter/z-ai/glm-5.3-flash', thinking: 'max', label: 'glm-5.3-flash',
-                  routing: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
+                  routing: { order: ['baseten', 'z-ai'], allow_fallbacks: false }, 'max-tokens': 131072 },
               ],
               // Routing must match reviewer 1: models.json holds one entry per model.
               judge: { model: 'openrouter/openai/gpt-6-sol', thinking: 'medium',
