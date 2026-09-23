@@ -163,8 +163,7 @@ the following defaults are used:
     { "model": "openrouter/openai/gpt-6-sol", "thinking": "medium", "label": "gpt-6-sol",
       "routing": { "order": ["openai", "azure"], "allow_fallbacks": false } },
     { "model": "openrouter/anthropic/claude-opus-5.5", "thinking": "medium", "label": "claude-opus-5.5",
-      "routing": { "order": ["anthropic", "amazon-bedrock"], "allow_fallbacks": false },
-      "compat": { "supportsMidConvoEffort": false } },
+      "routing": { "order": ["anthropic", "amazon-bedrock"], "allow_fallbacks": false } },
     { "model": "openrouter/z-ai/glm-5.3-flash", "thinking": "max", "label": "glm-5.3-flash",
       "routing": { "order": ["baseten", "z-ai"], "allow_fallbacks": false } }
   ],
@@ -177,8 +176,7 @@ Each review entry requires `model` and `label`. The `thinking` field is optional
 `thinking` and `label` are optional, with `label` defaulting to the model's last path segment and naming the judge job.
 
 Review and judge entries also accept four optional `openrouter/*`-only fields. `compat` is merged into the model's
-pi compat block, for working around provider quirks (the default config clears `supportsMidConvoEffort` on Opus 5,
-which OpenRouter's Anthropic endpoints reject). `routing` is sent as-is in the
+pi compat block, for working around provider quirks. `routing` is sent as-is in the
 [OpenRouter `provider` field](https://openrouter.ai/docs/guides/routing/provider-selection) to pin which upstream
 providers serve the model, and `max-tokens` caps the completion budget for endpoints that accept less than pi's
 catalog advertises:

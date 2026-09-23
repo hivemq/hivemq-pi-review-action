@@ -75,14 +75,8 @@ jobs:
               review: [
                 { model: 'openrouter/openai/gpt-6-sol', thinking: 'medium', label: 'gpt-6-sol',
                   routing: { order: ['openai', 'azure'], allow_fallbacks: false } },
-                // pi's catalog marks this model `supportsMidConvoEffort`, so it sends
-                // system `output_config` + `thinking.block_binding`. OpenRouter 400'd
-                // both until 2026-09-15 and the Bedrock fallback is unverified. Reviews
-                // never change effort mid-run, so clearing the flag costs nothing.
-                // https://github.com/earendil-works/pi/issues/9165
                 { model: 'openrouter/anthropic/claude-opus-5.5', thinking: 'medium', label: 'claude-opus-5.5',
-                  routing: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false },
-                  compat: { supportsMidConvoEffort: false } },
+                  routing: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false } },
                 // `max` is GLM's ceiling on this route; it has no `xhigh`.
                 { model: 'openrouter/z-ai/glm-5.3-flash', thinking: 'max', label: 'glm-5.3-flash',
                   routing: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
