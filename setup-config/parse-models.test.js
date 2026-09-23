@@ -79,13 +79,8 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
     'openai/gpt-6-sol',
     'z-ai/glm-5.3-flash',
   ]);
-  // Without this flag pi sends output_config + thinking.block_binding, which
-  // OpenRouter's Anthropic endpoints 400 on. See earendil-works/pi#9165.
   assert.deepStrictEqual(overrides['anthropic/claude-opus-5.5'], {
-    compat: {
-      supportsMidConvoEffort: false,
-      openRouterRouting: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false },
-    },
+    compat: { openRouterRouting: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false } },
   });
   assert.deepStrictEqual(overrides['z-ai/glm-5.3-flash'], {
     compat: { openRouterRouting: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
