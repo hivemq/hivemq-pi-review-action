@@ -165,7 +165,7 @@ the following defaults are used:
     { "model": "openrouter/anthropic/claude-opus-5.5", "thinking": "medium", "label": "claude-opus-5.5",
       "routing": { "order": ["anthropic", "amazon-bedrock"], "allow_fallbacks": false } },
     { "model": "openrouter/z-ai/glm-5.3-flash", "thinking": "max", "label": "glm-5.3-flash",
-      "routing": { "order": ["baseten", "z-ai"], "allow_fallbacks": false } }
+      "routing": { "order": ["baseten", "z-ai"], "allow_fallbacks": false }, "max-tokens": 131072 }
   ],
   "judge": { "model": "openrouter/openai/gpt-6-sol", "thinking": "medium",
     "routing": { "order": ["openai", "azure"], "allow_fallbacks": false } }
