@@ -75,13 +75,13 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
 
   const overrides = JSON.parse(outputs['models-json']).providers.openrouter.modelOverrides;
   assert.deepStrictEqual(Object.keys(overrides).sort(), [
-    'anthropic/claude-opus-5',
-    'openai/gpt-5.6-sol',
+    'anthropic/claude-opus-5.5',
+    'openai/gpt-6-sol',
     'z-ai/glm-5.3-flash',
   ]);
   // Without this flag pi sends output_config + thinking.block_binding, which
   // OpenRouter's Anthropic endpoints 400 on. See earendil-works/pi#9165.
-  assert.deepStrictEqual(overrides['anthropic/claude-opus-5'], {
+  assert.deepStrictEqual(overrides['anthropic/claude-opus-5.5'], {
     compat: {
       supportsMidConvoEffort: false,
       openRouterRouting: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false },
@@ -92,7 +92,7 @@ test('builds the default overlay and a routing-free matrix when unset', () => {
   });
   // Reviewer 1 and the judge are the same model, so the overlay must collapse to
   // one entry rather than fail the conflict guard.
-  assert.deepStrictEqual(overrides['openai/gpt-5.6-sol'], {
+  assert.deepStrictEqual(overrides['openai/gpt-6-sol'], {
     compat: { openRouterRouting: { order: ['openai', 'azure'], allow_fallbacks: false } },
   });
 });
@@ -185,7 +185,7 @@ test('strips routing from the review matrix but keeps the model untouched', () =
 
 test('labels the judge by the model\'s last path segment, or an explicit label', () => {
   assert.strictEqual(run(JSON.stringify(GLM_CONFIG)).outputs['judge-label'], 'glm-5.3-flash');
-  assert.strictEqual(run(undefined).outputs['judge-label'], 'gpt-5.6-sol');
+  assert.strictEqual(run(undefined).outputs['judge-label'], 'gpt-6-sol');
 
   const labelled = run(JSON.stringify({
     review: [{ model: 'openai/gpt-5.6-sol', label: 'gpt-5.6-sol' }],
