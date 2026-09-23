@@ -73,14 +73,14 @@ jobs:
             // endpoint here.
             const defaultConfig = {
               review: [
-                { model: 'openrouter/openai/gpt-5.6-sol', thinking: 'medium', label: 'gpt-5.6-sol',
+                { model: 'openrouter/openai/gpt-6-sol', thinking: 'medium', label: 'gpt-6-sol',
                   routing: { order: ['openai', 'azure'], allow_fallbacks: false } },
                 // pi's catalog marks this model `supportsMidConvoEffort`, so it sends
-                // system `output_config` + `thinking.block_binding`. OpenRouter's
-                // Anthropic endpoints reject both, 400ing every request; clearing the
-                // flag drops them. Model-specific: fable-5.1 on the same route is fine.
+                // system `output_config` + `thinking.block_binding`. OpenRouter 400'd
+                // both until 2026-09-15 and the Bedrock fallback is unverified. Reviews
+                // never change effort mid-run, so clearing the flag costs nothing.
                 // https://github.com/earendil-works/pi/issues/9165
-                { model: 'openrouter/anthropic/claude-opus-5', thinking: 'medium', label: 'claude-opus-5',
+                { model: 'openrouter/anthropic/claude-opus-5.5', thinking: 'medium', label: 'claude-opus-5.5',
                   routing: { order: ['anthropic', 'amazon-bedrock'], allow_fallbacks: false },
                   compat: { supportsMidConvoEffort: false } },
                 // `max` is GLM's ceiling on this route; it has no `xhigh`.
@@ -88,7 +88,7 @@ jobs:
                   routing: { order: ['baseten', 'z-ai'], allow_fallbacks: false } },
               ],
               // Routing must match reviewer 1: models.json holds one entry per model.
-              judge: { model: 'openrouter/openai/gpt-5.6-sol', thinking: 'medium',
+              judge: { model: 'openrouter/openai/gpt-6-sol', thinking: 'medium',
                 routing: { order: ['openai', 'azure'], allow_fallbacks: false } },
             };
 
