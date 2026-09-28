@@ -277,6 +277,11 @@ jobs:
           npm install @earendil-works/pi-coding-agent@0.87.1
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
+      - name: Configure Pi retries
+        run: |
+          mkdir -p "$HOME/.pi/agent"
+          cp .pi-review-action/pi-run/settings.json "$HOME/.pi/agent/settings.json"
+
       - name: Apply model routing overrides
         if: needs.setup.outputs.models-json != ''
         env:
@@ -311,9 +316,9 @@ jobs:
             printf '\n## Pre-computed PR delta\nUse this list as the PR delta:\n\n'
             cat pr-changed-files.txt
           } > pi-review-prompt.txt
-          pi -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
-            "$(cat pi-review-prompt.txt)" \
-            | tee pi-review-plan.txt
+          .pi-review-action/pi-run/pi-run.sh --out pi-review-plan.txt -- \
+            -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
+            "$(cat pi-review-prompt.txt)"
         env:
           OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
@@ -363,9 +368,9 @@ jobs:
         id: run_pi
         run: |
           set -o pipefail
-          pi -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
-            "$(cat "${{ steps.reviewer_prompt.outputs.path }}")" \
-            | tee pi-output.md
+          .pi-review-action/pi-run/pi-run.sh --out pi-output.md -- \
+            -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
+            "$(cat "${{ steps.reviewer_prompt.outputs.path }}")"
 
           sed -i 's|<h2>PR Review</h2>|<h2>PR Review (${{ matrix.label }})</h2>|' pi-output.md
 
@@ -491,6 +496,11 @@ jobs:
           npm install @earendil-works/pi-coding-agent@0.87.1
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
+      - name: Configure Pi retries
+        run: |
+          mkdir -p "$HOME/.pi/agent"
+          cp .pi-review-action/pi-run/settings.json "$HOME/.pi/agent/settings.json"
+
       - name: Apply model routing overrides
         if: needs.setup.outputs.models-json != ''
         env:
@@ -556,7 +566,8 @@ jobs:
           set -o pipefail
           # The judge returns its review by calling the submit_review tool, which
           # writes PI_REVIEW_OUTPUT and terminates the turn.
-          pi -p --model ${{ needs.setup.outputs.judge-model }} ${{ needs.setup.outputs.judge-thinking && format('--thinking {0}', needs.setup.outputs.judge-thinking) || '' }} --no-session \
+          .pi-review-action/pi-run/pi-run.sh --require pi-judge-review.json -- \
+            -p --model ${{ needs.setup.outputs.judge-model }} ${{ needs.setup.outputs.judge-thinking && format('--thinking {0}', needs.setup.outputs.judge-thinking) || '' }} --no-session \
             -e .pi-review-action/review-contract/extension.mjs \
             "$(cat "${{ steps.judge_prompt.outputs.path }}")"
 
