@@ -33,7 +33,8 @@ Two components work together:
 1. **Composite action** (`action.yml`): Resolves GitHub event context in the caller's workflow. Determines whether to
    run, extracts the PR number, and resolves the post-comment flag.
 2. **Reusable workflow** (`.github/workflows/pi-pr-review.yml`): Performs the actual review. Runs a matrix of 3 models,
-   then a judge job that synthesizes results.
+   then a judge job that synthesizes results, then a posting job that writes the result to the PR. See
+   [Security model](#security-model).
 
 This split is necessary because matrix strategy and multi-job workflows require a reusable workflow, while event
 analysis (`github.event.*`) is only available in the caller's context.
@@ -62,6 +63,12 @@ on:
         default: false
         type: boolean
 
+# Least privilege: the token only needs to read by default. Only the `review`
+# job below grants write, and it is a ceiling; the reusable workflow gives write
+# to its posting job alone.
+permissions:
+  contents: read
+
 jobs:
   resolve:
     runs-on: [pi]
@@ -76,6 +83,12 @@ jobs:
   review:
     needs: resolve
     if: needs.resolve.outputs.should-run == 'true'
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    # Pin to a reviewed commit SHA (with a `# v1` comment) and pass the same SHA
+    # as `action-ref`, so the prompts and scripts the jobs run follow the pin.
     uses: hivemq/hivemq-pi-review-action/.github/workflows/pi-pr-review.yml@v1
     with:
       pr-number: ${{ fromJson(needs.resolve.outputs.pr-number) }}
@@ -87,6 +100,35 @@ jobs:
       PI_DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
       PI_ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
 ```
+
+## Security model
+
+The review runs a model over PR content, with API keys in the environment.
+Content that a model reads can carry instructions, so the workflow gives each
+job only what it needs:
+
+| Job         | Reads the PR | Model API keys | Write token |
+|-------------|--------------|----------------|-------------|
+| `setup`     | metadata only | no            | no          |
+| `pi_review` | yes          | yes            | no          |
+| `pi_judge`  | yes          | yes            | no          |
+| `pi_post`   | no (JSON review only) | no    | yes         |
+
+- **Fork PRs are refused.** `setup` fails when the PR head is not in the base
+  repository, whatever the trigger. A fork PR is content from someone without
+  write access.
+- **The model jobs cannot write to the PR.** A model that follows an injected
+  instruction has no token to misuse. `pi_post` runs no model and reads only the
+  judge's schema-validated JSON review.
+- **Same-repository authors are trusted at write level.** Anyone who can push a
+  branch here can already edit a workflow and read the secrets it receives. The
+  trigger is the boundary: labeling needs triage access and `/review` needs one
+  of `allowed-comment-associations`. Do not widen either.
+- **API keys are still visible to the model jobs.** Use keys with a spend limit,
+  and prefer ephemeral runners. A persistent self-hosted runner keeps state
+  between jobs.
+- **Injected text can still shape the review's wording.** It cannot reach the
+  token or the keys through `pi_post`.
 
 ## Composite Action Inputs
 

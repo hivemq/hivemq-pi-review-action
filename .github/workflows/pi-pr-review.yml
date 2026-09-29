@@ -49,10 +49,11 @@ jobs:
   setup:
     name: Setup
     runs-on: "${{ inputs.runner-label }}"
-    # Only parses model config; never touches the PR. Restrict to read so it does
-    # not inherit the caller's issues/pull-requests write ceiling.
+    # Parses model config and rejects fork PRs; never checks out the PR. Read
+    # only, so it does not inherit the caller's issues/pull-requests write ceiling.
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       review-matrix: ${{ steps.parse.outputs.review-matrix }}
       judge-model: ${{ steps.parse.outputs.judge-model }}
@@ -60,6 +61,24 @@ jobs:
       judge-label: ${{ steps.parse.outputs.judge-label }}
       models-json: ${{ steps.parse.outputs.models-json }}
     steps:
+      # Every trigger (label, /review comment, dispatch) funnels through here.
+      # A fork PR would put untrusted content in front of jobs holding model API
+      # keys, so refuse it before any of them start. A deleted fork has no head
+      # repo and counts as a fork.
+      - name: Reject fork PRs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ inputs.pr-number }},
+            });
+            const base = `${context.repo.owner}/${context.repo.repo}`;
+            if (pr.head.repo?.full_name !== base) {
+              core.setFailed(`PR #${pr.number} comes from ${pr.head.repo?.full_name ?? 'a deleted fork'}, not ${base}. Pi does not review fork PRs.`);
+            }
+
       - name: Parse model config
         id: parse
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
@@ -203,10 +222,12 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.setup.outputs.review-matrix) }}
+    # Runs a model over untrusted PR content with API keys in its environment.
+    # It never posts, so it gets no write scope; pull-requests: read is for the
+    # PR lookup below.
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
+      pull-requests: read
     steps:
       - name: Resolve PR context
         id: pr_context
@@ -454,10 +475,10 @@ jobs:
     if: ${{ !cancelled() && needs.pi_review.result != 'skipped' }}
     runs-on: "${{ inputs.runner-label }}"
     timeout-minutes: 60
+    # Runs a model over untrusted review text with API keys in its environment.
+    # Posting happens in pi_post, which holds the write token instead.
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -610,25 +631,73 @@ jobs:
             printf '%s\n' "$PI_FINAL_MESSAGE"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload judge output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pi-judge-${{ inputs.pr-number }}-${{ github.run_id }}
+          path: |
+            pi-judge-review.json
+            pi-judge-output.md
+            judge-input.md
+          if-no-files-found: ignore
+
+  # The only job with a write token. It runs no model, holds no API keys, and
+  # never checks out the PR; it treats the judge's review as data and posts it.
+  pi_post:
+    name: Pi Post
+    needs: [pi_judge]
+    if: ${{ !cancelled() && needs.pi_judge.result == 'success' && inputs.post-comment }}
+    runs-on: "${{ inputs.runner-label }}"
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout action repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: hivemq/hivemq-pi-review-action
+          ref: ${{ inputs.action-ref }}
+          path: .pi-review-action
+
+      # No artifact exists when the judge had nothing to upload.
+      - name: Download judge output
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pi-judge-${{ inputs.pr-number }}-${{ github.run_id }}
+          path: judge
+
+      - name: Check for a judge review
+        id: judge
+        run: |
+          if [ -s judge/pi-judge-review.json ] && [ -s judge/pi-judge-output.md ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The judge produced no review; nothing to post."
+          fi
+
       - name: Post inline review
-        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style == 'inline' }}
+        if: ${{ steps.judge.outputs.found == 'true' && inputs.comment-style == 'inline' }}
         uses: ./.pi-review-action/post-inline-review
         with:
-          review-json: pi-judge-review.json
+          review-json: judge/pi-judge-review.json
           pr-number: ${{ inputs.pr-number }}
           github-token: ${{ github.token }}
 
       - name: Upsert judge comment
-        if: ${{ steps.run_judge.outputs.final-message != '' && inputs.post-comment && inputs.comment-style != 'inline' }}
+        if: ${{ steps.judge.outputs.found == 'true' && inputs.comment-style != 'inline' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
-          PI_FINAL_MESSAGE: ${{ steps.run_judge.outputs.final-message }}
           PR_NUMBER: ${{ inputs.pr-number }}
         with:
           github-token: ${{ github.token }}
           script: |
+            const fs = require('fs');
             const marker = '<!-- pi-judge -->';
-            const body = `${marker}\n${process.env.PI_FINAL_MESSAGE}`;
+            const body = `${marker}\n${fs.readFileSync('judge/pi-judge-output.md', 'utf8')}`;
             const issue_number = Number(process.env.PR_NUMBER);
 
             const { data: comments } = await github.rest.issues.listComments({
@@ -668,14 +737,3 @@ jobs:
                 body,
               });
             }
-
-      - name: Upload judge output
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: pi-judge-${{ inputs.pr-number }}-${{ github.run_id }}
-          path: |
-            pi-judge-review.json
-            pi-judge-output.md
-            judge-input.md
-          if-no-files-found: ignore
