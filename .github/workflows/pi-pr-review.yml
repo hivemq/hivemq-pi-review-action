@@ -662,6 +662,19 @@ jobs:
           ref: ${{ inputs.action-ref }}
           path: .pi-review-action
 
+      - name: Check for Node.js
+        id: deps
+        run: |
+          if ! node --version 2>/dev/null | grep -q '^v24\.'; then
+            echo "need_node=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Node.js
+        if: steps.deps.outputs.need_node == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
       # No artifact exists when the judge had nothing to upload.
       - name: Download judge output
         continue-on-error: true
@@ -673,11 +686,20 @@ jobs:
       - name: Check for a judge review
         id: judge
         run: |
-          if [ -s judge/pi-judge-review.json ] && [ -s judge/pi-judge-output.md ]; then
+          if [ -s judge/pi-judge-review.json ]; then
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
             echo "The judge produced no review; nothing to post."
           fi
+
+      # The review file came from a job that ran a model over untrusted PR
+      # content, so check it again here and build the comment body from the JSON.
+      # The uploaded pi-judge-output.md is never posted.
+      - name: Validate and render judge review
+        if: ${{ steps.judge.outputs.found == 'true' }}
+        run: |
+          node .pi-review-action/review-contract/validate.js judge/pi-judge-review.json
+          node .pi-review-action/review-contract/render.js judge/pi-judge-review.json > judge/comment.md
 
       - name: Post inline review
         if: ${{ steps.judge.outputs.found == 'true' && inputs.comment-style == 'inline' }}
@@ -697,7 +719,7 @@ jobs:
           script: |
             const fs = require('fs');
             const marker = '<!-- pi-judge -->';
-            const body = `${marker}\n${fs.readFileSync('judge/pi-judge-output.md', 'utf8')}`;
+            const body = `${marker}\n${fs.readFileSync('judge/comment.md', 'utf8')}`;
             const issue_number = Number(process.env.PR_NUMBER);
 
             const { data: comments } = await github.rest.issues.listComments({
