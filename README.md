@@ -118,8 +118,8 @@ job only what it needs:
   repository, whatever the trigger. A fork PR is content from someone without
   write access.
 - **The model jobs cannot write to the PR.** A model that follows an injected
-  instruction has no token to misuse. `pi_post` runs no model and reads only the
-  judge's schema-validated JSON review.
+  instruction has no token to misuse. `pi_post` runs no model. It validates the
+  judge's JSON review again, then renders the comment from that JSON.
 - **Same-repository authors are trusted at write level.** Anyone who can push a
   branch here can already edit a workflow and read the secrets it receives. The
   trigger is the boundary: labeling needs triage access and `/review` needs one
