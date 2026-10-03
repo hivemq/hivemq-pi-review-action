@@ -295,7 +295,7 @@ jobs:
           mkdir -p "$pi_home"
           printf '{"name":"pi-agent-install","private":true}\n' > "$pi_home/package.json"
           cd "$pi_home"
-          npm install @earendil-works/pi-coding-agent@0.87.1
+          npm install @earendil-works/pi-coding-agent@0.99.2
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Configure Pi retries
@@ -514,7 +514,7 @@ jobs:
           mkdir -p "$pi_home"
           printf '{"name":"pi-agent-install","private":true}\n' > "$pi_home/package.json"
           cd "$pi_home"
-          npm install @earendil-works/pi-coding-agent@0.87.1
+          npm install @earendil-works/pi-coding-agent@0.99.2
           echo "$pi_home/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Configure Pi retries
