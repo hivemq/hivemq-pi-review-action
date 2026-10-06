@@ -229,11 +229,18 @@ jobs:
               });
               core.setOutput('available', 'true');
             } catch (e) {
-              if (e.status === 404) {
-                core.setOutput('available', 'false');
-              } else {
-                throw e;
+              if (e.status !== 404) throw e;
+              // An open PR with merge conflicts has no merge ref either; only a
+              // closed PR may skip quietly.
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: number,
+              });
+              if (pr.state === 'open') {
+                throw new Error(`PR #${number} is open but has no merge ref; resolve its merge conflicts and re-run the review.`);
               }
+              core.setOutput('available', 'false');
             }
 
   pi_review:
@@ -272,17 +279,24 @@ jobs:
               });
               core.setOutput('available', 'true');
             } catch (e) {
-              if (e.status === 404) {
-                core.setOutput('available', 'false');
-              } else {
-                throw e;
+              if (e.status !== 404) throw e;
+              // An open PR with merge conflicts has no merge ref either; only a
+              // closed PR may skip quietly.
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: number,
+              });
+              if (pr.state === 'open') {
+                throw new Error(`PR #${number} is open but has no merge ref; resolve its merge conflicts and re-run the review.`);
               }
+              core.setOutput('available', 'false');
             }
 
       - name: Report merge race
         if: steps.merge_probe.outputs.available == 'false'
         run: |
-          echo "pull request already merged during runner queue wait; skipping the review for ${{ matrix.label }}." >> "$GITHUB_STEP_SUMMARY"
+          echo "pull request was merged or closed during the runner queue wait; skipping the review for ${{ matrix.label }}." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve PR context
         if: steps.merge_probe.outputs.available != 'false'
@@ -548,8 +562,10 @@ jobs:
     timeout-minutes: 60
     # Runs a model over untrusted review text with API keys in its environment.
     # Posting happens in pi_post, which holds the write token instead.
+    # pull-requests: read is for the merge-ref probe's PR lookup.
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - name: Re-check merge ref
         id: merge_probe
@@ -568,17 +584,24 @@ jobs:
               });
               core.setOutput('available', 'true');
             } catch (e) {
-              if (e.status === 404) {
-                core.setOutput('available', 'false');
-              } else {
-                throw e;
+              if (e.status !== 404) throw e;
+              // An open PR with merge conflicts has no merge ref either; only a
+              // closed PR may skip quietly.
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: number,
+              });
+              if (pr.state === 'open') {
+                throw new Error(`PR #${number} is open but has no merge ref; resolve its merge conflicts and re-run the review.`);
               }
+              core.setOutput('available', 'false');
             }
 
       - name: Report merge race
         if: steps.merge_probe.outputs.available == 'false'
         run: |
-          echo "pull request already merged during runner queue wait; skipping the judge." >> "$GITHUB_STEP_SUMMARY"
+          echo "pull request was merged or closed during the runner queue wait; skipping the judge." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: steps.merge_probe.outputs.available != 'false'

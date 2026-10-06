@@ -49,10 +49,15 @@ test('pi_review and pi_judge re-probe with the exact same script as the setup jo
 
 // Runs the probe script against a stubbed github-script `core`/`github`/`process`,
 // returning the outputs set plus any error the script let escape.
-async function run(getRefImpl, prNumber = '42') {
+async function run(getRefImpl, prState = 'closed', prNumber = '42') {
   const outputs = {};
   const core = { setOutput: (k, v) => { outputs[k] = v; } };
-  const github = { rest: { git: { getRef: getRefImpl } } };
+  const github = {
+    rest: {
+      git: { getRef: getRefImpl },
+      pulls: { get: async () => ({ data: { state: prState } }) },
+    },
+  };
   const context = { repo: { owner: 'hivemq', repo: 'hivemq-pi-review-action' } };
   const process_ = { env: { PR_NUMBER: prNumber } };
   const sandbox = { core, github, context, process: process_, Number };
@@ -80,14 +85,24 @@ test('reports available when the merge ref exists', async () => {
 // A 404 from GET /git/refs/pull/<n>/merge is the exact signal the checkout
 // step would otherwise fail on — the already-merged-PR case this probe exists
 // to catch (PLT-1814).
-test('reports unavailable on a 404 instead of throwing', async () => {
-  const { outputs, thrown } = await run(async () => {
-    const err = new Error('Not Found');
-    err.status = 404;
-    throw err;
-  });
+const notFound = async () => {
+  const err = new Error('Not Found');
+  err.status = 404;
+  throw err;
+};
+
+test('reports unavailable on a 404 for a closed PR instead of throwing', async () => {
+  const { outputs, thrown } = await run(notFound, 'closed');
   assert.strictEqual(thrown, null);
   assert.strictEqual(outputs.available, 'false');
+});
+
+// A conflicted open PR has no merge ref either; skipping it green would hide a
+// review that never ran.
+test('fails on a 404 for an open PR rather than skipping it as merged', async () => {
+  const { outputs, thrown } = await run(notFound, 'open');
+  assert.match(thrown?.message ?? '', /open but has no merge ref/);
+  assert.strictEqual(outputs.available, undefined);
 });
 
 test('lets a non-404 error propagate rather than masking it as unavailable', async () => {
