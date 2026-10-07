@@ -6,32 +6,8 @@
 // logic against a stubbed github-script `github`/`core`/`process`.
 const { test } = require('node:test');
 const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
 const vm = require('node:vm');
-
-const WORKFLOW = path.join(__dirname, '..', '.github', 'workflows', 'pi-pr-review.yml');
-const LINES = fs.readFileSync(WORKFLOW, 'utf8').split('\n');
-
-function extractScriptAt(idLineIndex) {
-  const scriptLineIdx = idLineIndex + 1 + LINES.slice(idLineIndex + 1).findIndex((l) => l.trim() === 'script: |');
-  assert.notStrictEqual(scriptLineIdx, idLineIndex, `could not find a script block after line ${idLineIndex + 1}`);
-  const indent = LINES[scriptLineIdx].indexOf('script:') + 2;
-  const body = [];
-  for (const line of LINES.slice(scriptLineIdx + 1)) {
-    if (line.trim() !== '' && !line.startsWith(' '.repeat(indent))) break;
-    body.push(line.slice(indent));
-  }
-  return body.join('\n');
-}
-
-function findScripts(idName) {
-  const scripts = [];
-  LINES.forEach((line, i) => {
-    if (line.trim() === `id: ${idName}`) scripts.push(extractScriptAt(i));
-  });
-  return scripts;
-}
+const { findScripts } = require('./extract');
 
 const SETUP_SCRIPTS = findScripts('merge_ref');
 const PROBE_SCRIPTS = findScripts('merge_probe');
@@ -97,7 +73,7 @@ test('reports unavailable on a 404 for a closed PR instead of throwing', async (
   assert.strictEqual(outputs.available, 'false');
 });
 
-// A conflicted open PR has no merge ref either; skipping it green would hide a
+// An open PR that never had a clean merge has no merge ref; skipping it green would hide a
 // review that never ran.
 test('fails on a 404 for an open PR rather than skipping it as merged', async () => {
   const { outputs, thrown } = await run(notFound, 'open');
