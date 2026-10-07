@@ -1,0 +1,140 @@
+name: UAT
+
+# Drives pi-pr-review.yml against live GitHub refs. Every path here skips the
+# model jobs, so it needs no API keys and spends no tokens.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/pi-pr-review.yml
+      - .github/workflows/uat.yml
+      - merge-ref-check/**
+  workflow_dispatch:
+
+# pi-pr-review.yml cancels any other run for the same PR number, so two UAT
+# runs reviewing the same merged PR at once would cancel each other.
+concurrency:
+  group: uat-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  find_merged_pr:
+    name: Find a merged PR
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      number: ${{ steps.find.outputs.number }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          number="$(gh pr list --repo "$REPO" --state merged --limit 20 --json number,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository | not)][0].number')"
+          if [ -z "$number" ]; then
+            echo "::error::No merged same-repo PR to run the UAT against."
+            exit 1
+          fi
+          echo "Using merged PR #$number"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+  # A merged PR has lost refs/pull/<n>/merge. Setup must pass and the model
+  # jobs must report skipped, not fail at checkout.
+  merged_pr_review:
+    name: Merged PR
+    needs: find_merged_pr
+    uses: ./.github/workflows/pi-pr-review.yml
+    # A called workflow may not request more than its caller grants, and
+    # pi_post asks for these even though it never runs here.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    with:
+      pr-number: ${{ fromJSON(needs.find_merged_pr.outputs.number) }}
+      runner-label: ubuntu-latest
+
+  assert_merged_pr_skipped:
+    name: Assert merged PR skipped cleanly
+    needs: merged_pr_review
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+          CALL_RESULT: ${{ needs.merged_pr_review.result }}
+        run: |
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.name | startswith("Merged PR / ")) | "\(.name)\t\(.conclusion)"' \
+            | tee jobs.tsv
+
+          fail=0
+          expect() {
+            local prefix="$1" want="$2"
+            local rows
+            rows="$(grep -F "Merged PR / $prefix" jobs.tsv || true)"
+            if [ -z "$rows" ]; then
+              echo "::error::No job named 'Merged PR / $prefix*' in this run."
+              fail=1
+              return
+            fi
+            while IFS=$'\t' read -r name conclusion; do
+              if [ "$conclusion" != "$want" ]; then
+                echo "::error::$name concluded '$conclusion', want '$want'."
+                fail=1
+              fi
+            done <<< "$rows"
+          }
+          expect "Setup" success
+          expect "Pi Review" skipped
+          expect "Pi Judge" skipped
+          expect "Pi Post" skipped
+
+          if [ "$CALL_RESULT" != "success" ]; then
+            echo "::error::pi-pr-review.yml concluded '$CALL_RESULT', want 'success'."
+            fail=1
+          fi
+          exit "$fail"
+
+  # The open PR that triggered this run always has a merge ref: GitHub runs no
+  # pull_request workflow for a PR without one.
+  probe_open_pr:
+    name: Probe reports an open PR as available
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Extract the probe from pi-pr-review.yml
+        run: node merge-ref-check/extract.js > "$RUNNER_TEMP/probe.cjs"
+
+      - name: Run the probe
+        id: probe
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        with:
+          script: |
+            const probe = require(`${process.env.RUNNER_TEMP}/probe.cjs`);
+            await probe({ github, context, core });
+
+      - name: Assert available
+        env:
+          AVAILABLE: ${{ steps.probe.outputs.available }}
+        run: |
+          if [ "$AVAILABLE" != "true" ]; then
+            echo "::error::Probe reported available='$AVAILABLE' for open PR #${{ github.event.pull_request.number }}, want 'true'."
+            exit 1
+          fi
