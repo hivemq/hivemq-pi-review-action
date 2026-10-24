@@ -17,6 +17,18 @@ outputs:
   post-comment:
     description: 'Whether to post/update a PR comment (true/false)'
     value: ${{ steps.resolve.outputs.post-comment }}
+  trigger-kind:
+    description: 'How the review was triggered: auto | manual | comment | dispatch'
+    value: ${{ steps.resolve.outputs.trigger-kind }}
+  auto-approve-eligible:
+    description: 'Stage 1 gate: PR is a candidate for AI auto-approve (true/false)'
+    value: ${{ steps.gate.outputs.auto-approve-eligible }}
+  force-human:
+    description: 'Stage 1 gate: a hard rule requires a human reviewer (true/false)'
+    value: ${{ steps.gate.outputs.force-human }}
+  gate-reason:
+    description: 'Stage 1 gate: short machine reason for the verdict'
+    value: ${{ steps.gate.outputs.gate-reason }}
 runs:
   using: composite
   steps:
@@ -28,6 +40,7 @@ runs:
         should_run=false
         pr_number=""
         post_comment=false
+        trigger_kind=none
 
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           should_run=true
@@ -36,6 +49,7 @@ runs:
           if [ -z "$post_comment" ]; then
             post_comment=false
           fi
+          trigger_kind=dispatch
 
         elif [ "${{ github.event_name }}" = "issue_comment" ]; then
           # Only trigger on PR comments that start with /review
@@ -49,6 +63,7 @@ runs:
               should_run=true
               pr_number="${{ github.event.issue.number }}"
               post_comment=true
+              trigger_kind=comment
             else
               echo "Ignoring /review from author_association=$author_association (allowed: $allowed_associations)"
             fi
@@ -64,18 +79,40 @@ runs:
           #   'manual-review' — an explicit, manually-added label that triggers
           #                     regardless of draft state, letting authors get a
           #                     Pi review before marking the PR ready for review.
-          if { [ "$label_name" = "review" ] && [ "$is_draft" != "true" ]; } || [ "$label_name" = "manual-review" ]; then
+          # trigger_kind distinguishes the auto path (bot-applied 'review' on
+          # checks-pass, the only path eligible for auto-approve) from a human
+          # explicitly asking for a review via 'manual-review'.
+          if [ "$label_name" = "review" ] && [ "$is_draft" != "true" ]; then
             should_run=true
             pr_number="${{ github.event.pull_request.number }}"
             post_comment=true
+            trigger_kind=auto
+          elif [ "$label_name" = "manual-review" ]; then
+            should_run=true
+            pr_number="${{ github.event.pull_request.number }}"
+            post_comment=true
+            trigger_kind=manual
           fi
         fi
 
         echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
         echo "pr-number=$pr_number" >> "$GITHUB_OUTPUT"
         echo "post-comment=$post_comment" >> "$GITHUB_OUTPUT"
+        echo "trigger-kind=$trigger_kind" >> "$GITHUB_OUTPUT"
 
         echo "Event: ${{ github.event_name }}"
         echo "should-run=$should_run"
         echo "pr-number=$pr_number"
         echo "post-comment=$post_comment"
+        echo "trigger-kind=$trigger_kind"
+
+    - id: gate
+      name: Stage 1 sensitivity gate
+      if: ${{ steps.resolve.outputs.should-run == 'true' }}
+      shell: bash
+      env:
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.resolve.outputs.pr-number }}
+        TRIGGER_KIND: ${{ steps.resolve.outputs.trigger-kind }}
+        GH_TOKEN: ${{ github.token }}
+      run: bash "${{ github.action_path }}/scripts/auto-approve-gate.sh"
