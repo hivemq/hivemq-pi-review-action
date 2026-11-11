@@ -28,11 +28,12 @@ on:
         default: 'v1'
         type: string
     secrets:
-      # All optional: a config only needs the keys its own models use, and a
-      # missing one fails the run with a clear auth error rather than up front.
-      PI_OPENAI_API_KEY:
-        required: false
+      # Every model runs through OpenRouter. The other four are unused and
+      # stay declared only because callers still pass them; an undeclared
+      # secret fails the call.
       PI_OPENROUTER_API_KEY:
+        required: false
+      PI_OPENAI_API_KEY:
         required: false
       PI_ANTHROPIC_API_KEY:
         required: false
@@ -421,11 +422,7 @@ jobs:
             -p --model ${{ matrix.model }} ${{ matrix.thinking && format('--thinking {0}', matrix.thinking) || '' }} --no-session \
             "$(cat pi-review-prompt.txt)"
         env:
-          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
-          ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
           PR_URL: ${{ steps.pr_context.outputs.url }}
@@ -486,11 +483,7 @@ jobs:
             echo "$delim"
           } >> "$GITHUB_OUTPUT"
         env:
-          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
-          ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
           PR_NUMBER: ${{ steps.pr_context.outputs.number }}
           PR_TITLE: ${{ steps.pr_context.outputs.title }}
           PR_URL: ${{ steps.pr_context.outputs.url }}
@@ -743,11 +736,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
         env:
           PI_REVIEW_OUTPUT: pi-judge-review.json
-          OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
-          ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
           JUDGE_INPUT_FILE: judge-input.md
 
       - name: Publish judge result to run summary

@@ -94,11 +94,7 @@ jobs:
       pr-number: ${{ fromJson(needs.resolve.outputs.pr-number) }}
       post-comment: ${{ fromJson(needs.resolve.outputs.post-comment) }}
     secrets:
-      PI_OPENAI_API_KEY: ${{ secrets.PI_OPENAI_API_KEY }}
       PI_OPENROUTER_API_KEY: ${{ secrets.PI_OPENROUTER_API_KEY }}
-      PI_ANTHROPIC_API_KEY: ${{ secrets.PI_ANTHROPIC_API_KEY }}
-      PI_DEEPSEEK_API_KEY: ${{ secrets.PI_DEEPSEEK_API_KEY }}
-      PI_ZAI_API_KEY: ${{ secrets.PI_ZAI_API_KEY }}
 ```
 
 ## Security model
@@ -186,13 +182,13 @@ To opt in, pass `comment-style: inline` in the caller workflow:
 
 ## Required Secrets
 
-| Secret                  | Description                                   |
-|-------------------------|-----------------------------------------------|
-| `PI_OPENAI_API_KEY`     | OpenAI API key (used by GPT-5.6 Sol and judge)    |
-| `PI_DEEPSEEK_API_KEY`   | DeepSeek API key (optional; for direct `deepseek/*` models) |
-| `PI_ANTHROPIC_API_KEY`  | Anthropic API key (used by Claude Opus 5)     |
-| `PI_OPENROUTER_API_KEY` | OpenRouter API key (used by DeepSeek v4 Flash and other `openrouter/*` models) |
-| `PI_ZAI_API_KEY`        | Z.AI API key (optional; for `zai/*` models)   |
+| Secret                  | Description                                                    |
+|-------------------------|----------------------------------------------------------------|
+| `PI_OPENROUTER_API_KEY` | OpenRouter API key. Every model, the judge included, runs through OpenRouter. |
+
+`PI_OPENAI_API_KEY`, `PI_ANTHROPIC_API_KEY`, `PI_DEEPSEEK_API_KEY` and `PI_ZAI_API_KEY` are
+deprecated. The workflow still accepts them so existing callers keep working, but no job reads them.
+Drop them from your `secrets:` block.
 
 ## Model Configuration
 
