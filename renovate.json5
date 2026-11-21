@@ -1,4 +1,11 @@
 {
+    packageRules: [
+        {
+            description: 'Workflows use .github/workflows/actions.lock, which records the commit for each tag, so keep tags instead of SHA pins.',
+            matchManagers: ['github-actions'],
+            pinDigests: false
+        }
+    ],
     $schema: 'https://docs.renovatebot.com/renovate-schema.json',
     extends: [
         'local>hivemq/renovate-config:default.json5',
